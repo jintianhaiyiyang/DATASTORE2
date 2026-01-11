@@ -8,6 +8,7 @@ export default function AdminPage() {
   const [isAuthed, setIsAuthed] = useState(false);
   const [user, setUser] = useState(null);
 
+  // 登录表单状态
   const [loginForm, setLoginForm] = useState({
     username: "",
     password: "",
@@ -30,22 +31,24 @@ export default function AdminPage() {
     }
   }
 
-  // 2. 初始化校验管理员权限
+  // 2. 初始化校验权限 (核心修复：去掉 username === 'admin' 限制)
   useEffect(() => {
     const run = async () => {
       try {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
-        // 必须是已认证且用户名为 admin 才能进入
-        if (data.isAuthenticated && data.username === 'admin') {
+        
+        // 🟢 只要 isLoggedIn 为 true 即可进入后台
+        if (data.isLoggedIn) {
           setIsAuthed(true);
-          setUser({ username: data.username });
+          setUser(data);
           await fetchArticles();
         }
       } catch (e) {
         console.error("check auth error", e);
+      } finally {
+        setCheckingAuth(false);
       }
-      setCheckingAuth(false);
     };
     run();
   }, []);
@@ -53,7 +56,7 @@ export default function AdminPage() {
   // 3. 登录逻辑
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setLoginMsg("");
+    setLoginMsg("登录中...");
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -61,16 +64,16 @@ export default function AdminPage() {
         body: JSON.stringify(loginForm),
       });
       const data = await res.json();
+      
       if (res.ok && data.success) {
         setIsAuthed(true);
-        setUser({ username: data.username });
-        setLoginMsg("登录成功");
-        await fetchArticles();
+        // 登录成功后刷新页面，确保状态完全同步
+        window.location.reload();
       } else {
         setLoginMsg(data.message || "登录失败");
       }
     } catch (err) {
-      setLoginMsg("登录异常");
+      setLoginMsg("网络请求异常");
     }
   };
 
@@ -79,47 +82,42 @@ export default function AdminPage() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) { /* ignore */ }
-    setIsAuthed(false);
-    setUser(null);
-    setArticles([]);
-    setEditingArticle(null);
+    window.location.reload();
   };
 
   if (checkingAuth) {
     return (
       <Layout title="验证中...">
-        <div className={styles.container}>
-          <div className={styles.card} style={{textAlign: 'center', color: '#666'}}>
-            <p>🔒 正在验证身份权限...</p>
-          </div>
+        <div style={{padding: '50px', textAlign: 'center', color: '#fff'}}>
+          ⌛️ 正在验证身份权限...
         </div>
       </Layout>
     );
   }
 
-  // --- 登录界面 ---
+  // --- 登录界面 (未登录时显示) ---
   if (!isAuthed) {
     return (
       <Layout title="后台登录">
         <div className={styles.container}>
-          <div className={styles.loginContainer}>
-            <h1 style={{ marginBottom: '24px' }}>后台管理系统</h1>
-            <p style={{ marginBottom: '24px', color: '#666', fontSize: '14px' }}>
-              请使用管理员账号登录以继续
+          <div className={styles.loginContainer} style={{maxWidth: '400px', margin: '80px auto', padding: '40px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)'}}>
+            <h1 style={{ marginBottom: '24px', textAlign: 'center', color: '#111', fontSize: '24px' }}>后台管理系统</h1>
+            <p style={{ marginBottom: '24px', color: '#666', fontSize: '14px', textAlign: 'center' }}>
+              请登录以管理内容
             </p>
             <form className={styles.form} onSubmit={handleLoginSubmit}>
-              <div>
+              <div style={{ marginBottom: '16px' }}>
                 <input
-                  className={styles.input}
-                  placeholder="用户名"
+                  style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px' }}
+                  placeholder="邮箱 / 用户名"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm((prev) => ({ ...prev, username: e.target.value }))}
                   required
                 />
               </div>
-              <div>
+              <div style={{ marginBottom: '24px' }}>
                 <input
-                  className={styles.input}
+                  style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px' }}
                   type="password"
                   placeholder="密码"
                   value={loginForm.password}
@@ -127,11 +125,11 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <button type="submit" className={styles.primaryBtn} style={{width: '100%'}}>
+              <button type="submit" style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>
                 立即登录
               </button>
               {loginMsg && (
-                <p className={`${styles.message} ${!loginMsg.includes('成功') ? styles.errorMsg : ''}`}>
+                <p style={{ marginTop: '16px', color: loginMsg.includes('成功') ? 'green' : 'red', textAlign: 'center' }}>
                   {loginMsg}
                 </p>
               )}
@@ -142,15 +140,15 @@ export default function AdminPage() {
     );
   }
 
-  // --- 主管理界面 ---
+  // --- 主管理界面 (已登录显示) ---
   return (
     <Layout title="后台发布中心">
       <div className={styles.container}>
         <div className={styles.card}>
           <div className={styles.header}>
-            <h1>后台控制台</h1>
+            <h1>🛠️ 后台控制台</h1>
             <div className={styles.userInfo}>
-              <span>👤 {user?.username}</span>
+              <span style={{marginRight: '15px'}}>管理员: {user?.username || user?.email}</span>
               <button type="button" className={styles.logoutBtn} onClick={handleLogout}>退出</button>
             </div>
           </div>
@@ -190,7 +188,7 @@ export default function AdminPage() {
   );
 }
 
-// --- 文章管理子组件 ---
+// --- 子组件：文章管理区块 ---
 function ArticleAdminSection({ articles, editingArticle, setEditingArticle, refreshArticles }) {
   return (
     <>
@@ -255,7 +253,7 @@ function ArticleAdminSection({ articles, editingArticle, setEditingArticle, refr
   );
 }
 
-// --- 文章表单 ---
+// --- 子组件：文章发布表单 ---
 function ArticleForm({ editingArticle, onSaved, onCancelEdit }) {
   const isEdit = !!editingArticle;
   const [form, setForm] = useState({
@@ -318,7 +316,7 @@ function ArticleForm({ editingArticle, onSaved, onCancelEdit }) {
   );
 }
 
-// --- 数据集表单 (新增 richContent 字段) ---
+// --- 子组件：数据集发布表单 ---
 function DatasetForm() {
   const [form, setForm] = useState({
     name: "",
@@ -372,8 +370,8 @@ function DatasetForm() {
           <textarea className={styles.textarea} rows={10} value={form.richContent} onChange={(e) => setForm({...form, richContent: e.target.value})} placeholder="输入图文介绍 HTML..." />
         </div>
         <div>
-          <label>百度网盘链接</label>
-          <input className={styles.input} value={form.baiduLink} onChange={(e) => setForm({...form, baiduLink: e.target.value})} required />
+          <label>网盘/下载链接</label>
+          <input className={styles.input} value={form.baiduLink} onChange={(e) => setForm({...form, baiduLink: e.target.value})} required placeholder="用户支付后可见的链接" />
         </div>
         <div>
           <label>标签 (逗号分隔)</label>
