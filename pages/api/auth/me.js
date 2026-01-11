@@ -1,16 +1,17 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 
-async function handler(req, res) {
-  const user = req.session.user;
-
-  if (!user || !user.isLoggedIn) {
-    return res.status(200).json({ isAuthenticated: false });
+async function meRoute(req, res) {
+  // 直接从 Session 中读取用户信息
+  if (req.session.user) {
+    res.json({
+      ...req.session.user,
+      isLoggedIn: true,
+    });
+  } else {
+    res.json({
+      isLoggedIn: false,
+    });
   }
-
-  return res.status(200).json({ 
-    isAuthenticated: true, 
-    username: user.username 
-  });
 }
 
-export default withIronSessionApiRoute(handler);
+export default withIronSessionApiRoute(meRoute);
