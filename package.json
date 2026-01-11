@@ -1,0 +1,25 @@
+{
+  "name": "data-market-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@vercel/kv": "^3.0.0",
+    "alipay-sdk": "^4.14.0",
+    "fuse.js": "^7.1.0",
+    "iron-session": "^8.0.4",
+    "jsonwebtoken": "^9.0.2",
+    "next": "14.0.0",
+    "nodemailer": "^7.0.12",
+    "qrcode.react": "^4.2.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-markdown": "^10.1.0",
+    "stripe": "^20.0.0",
+    "wechatpay-node-v3": "^2.2.1"
+  }
+}
