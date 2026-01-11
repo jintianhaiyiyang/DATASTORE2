@@ -1,0 +1,141 @@
+/* styles/Card.module.css */
+
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: #BFDBFE; /* 悬停时边框变淡蓝 */
+}
+
+/* 顶部：类型标签 + 价格/状态 */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.typeBadge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* 文章类型的颜色 */
+.typeArticle {
+  background: #EFF6FF; /* 浅蓝底 */
+  color: #2563EB;      /* 蓝字 */
+}
+
+/* 数据集类型的颜色 */
+.typeDataset {
+  background: #ECFDF5; /* 浅绿底 */
+  color: #059669;      /* 绿字 */
+}
+
+.price {
+  font-weight: 700;
+  font-size: 16px;
+  color: #F59E0B; /* 金色价格 */
+}
+
+.free {
+  color: #059669; /* 免费绿色 */
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 内容区域 */
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+  /* 限制显示2行 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.summary {
+  font-size: 14px;
+  color: #6B7280; /* 深灰 */
+  line-height: 1.6;
+  margin-bottom: 20px;
+  flex-grow: 1; /* 让内容撑开，把底部标签推下去 */
+  
+  /* 限制显示3行 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 底部标签栏 */
+.footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #F3F4F6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  font-size: 12px;
+  color: #6B7280;
+  background: #F3F4F6;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.card:hover .tag {
+  background: #E5E7EB;
+}
+.paidBadge {
+  font-size: 12px;
+  color: #10B981;
+  font-weight: 600;
+  background: #ECFDF5;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.downloadBtn {
+  background: var(--primary-color);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.downloadBtn:hover {
+  opacity: 0.9;
+}
+
+.tagList {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}

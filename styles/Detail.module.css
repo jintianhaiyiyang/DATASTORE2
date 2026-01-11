@@ -1,0 +1,162 @@
+/* styles/Detail.module.css */
+
+.pageWrapper {
+  background-color: #F9FAFB;
+  min-height: 100vh;
+  padding: 40px 24px;
+}
+
+.container {
+  max-width: 800px; /* 阅读体验最佳宽度 */
+  margin: 0 auto;
+}
+
+/* --- 白底卡片容器 --- */
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 48px;
+  margin-bottom: 24px;
+}
+
+/* 面包屑/返回导航 */
+.backLink {
+  display: inline-block;
+  margin-bottom: 24px;
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: #2563EB;
+}
+
+/* --- 标题区域 --- */
+.header {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.2;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 14px;
+  color: #6B7280;
+}
+
+.tag {
+  background: #EFF6FF;
+  color: #2563EB;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* --- 正文内容 --- */
+.content {
+  font-size: 17px;
+  line-height: 1.8;
+  color: #374151;
+  white-space: pre-wrap; /* 保留换行符 */
+}
+
+/* --- 数据集专属样式 --- */
+.priceTag {
+  display: inline-block;
+  font-size: 32px;
+  font-weight: 700;
+  color: #F59E0B; /* 商务金 */
+  margin-bottom: 8px;
+}
+
+.priceLabel {
+  font-size: 14px;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 24px;
+  display: block;
+}
+
+.description {
+  font-size: 16px;
+  color: #4B5563;
+  background: #F9FAFB;
+  padding: 24px;
+  border-radius: 8px;
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+/* 支付区域 */
+.paySection {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px dashed #E5E7EB;
+}
+
+.payTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.payBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border: 1px solid #E5E7EB;
+  background: #fff;
+  border-radius: 8px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.payBtn:hover {
+  border-color: #2563EB;
+  color: #2563EB;
+  background: #EFF6FF;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -2px rgba(37, 99, 235, 0.1);
+}
+
+.payBtnActive {
+  border-color: #2563EB;
+  background: #2563EB;
+  color: white;
+}
+
+.payBtnActive:hover {
+  background: #1D4ED8;
+  color: white;
+}
