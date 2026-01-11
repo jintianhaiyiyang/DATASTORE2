@@ -1,57 +1,48 @@
-import fs from "fs";
-import path from "path";
 import { withIronSessionApiRoute } from "../../../lib/session";
+import { getDatasets, getUsers } from "../../../lib/db";
 
-const filePath = path.join(process.cwd(), "data", "datasets.json");
-const usersPath = path.join(process.cwd(), "data", "users.json");
-
-async function datasetDetailHandler(req, res) {
+async function singleDatasetRoute(req, res) {
   const { id } = req.query;
-  const sessionUser = req.session.user;
+  const datasetId = Number(id);
 
-  // 1. 读取数据集
-  let datasets = [];
   try {
-    if (fs.existsSync(filePath)) {
-      datasets = JSON.parse(fs.readFileSync(filePath, "utf8") || "[]");
+    // 1. 获取所有数据集
+    const datasets = await getDatasets();
+    const dataset = datasets.find((d) => d.id === datasetId);
+
+    if (!dataset) {
+      return res.status(404).json({ message: "资源不存在" });
     }
-  } catch (e) {
-    return res.status(500).json({ message: "数据读取失败" });
-  }
 
-  const dataset = datasets.find((d) => d.id.toString() === id.toString());
-  if (!dataset) return res.status(404).json({ message: "数据集不存在" });
+    // 2. 检查权限 (核心修改)
+    let isPaid = false;
+    const user = req.session.user;
 
-  // 2. 权限校验逻辑
-  const adminUsername = process.env.ADMIN_USERNAME || "admin";
-  const isAdmin = sessionUser?.isLoggedIn && sessionUser.username === adminUsername;
-  
-  let isPaid = isAdmin || Number(dataset.price) === 0; // 管理员或免费资源默认已购
+    if (user && user.isLoggedIn) {
+      // 🟢 关键：不要只看 Session，要去 KV 数据库查最新的用户数据
+      // 因为 Session 里的数据可能是登录时存的旧数据
+      const allUsers = await getUsers();
+      const freshUser = allUsers.find(u => u.email === user.email);
 
-  if (!isPaid && sessionUser?.isLoggedIn) {
-    // 检查普通用户的购买记录
-    try {
-      const users = JSON.parse(fs.readFileSync(usersPath, "utf8") || "[]");
-      const user = users.find(u => u.email === sessionUser.email);
-      if (user?.purchasedIds?.includes(Number(id))) {
+      if (freshUser && freshUser.purchasedIds && freshUser.purchasedIds.includes(datasetId)) {
         isPaid = true;
       }
-    } catch (e) { console.error("读取用户记录失败"); }
-  }
+    }
 
-  // 3. GET 请求：返回脱敏后的数据
-  if (req.method === "GET") {
-    const { baiduLink, ...publicData } = dataset;
-    return res.status(200).json({
+    // 3. 构建返回数据
+    // 如果没付钱，就把 downloadUrl 藏起来，不返回给前端
+    const { downloadUrl, ...publicData } = dataset;
+
+    res.json({
       ...publicData,
-      isPaid,
-      // 只有付过款才返回真实的链接
-      downloadUrl: isPaid ? baiduLink : null 
+      isPaid: isPaid, // 告诉前端是否已解锁
+      downloadUrl: isPaid ? downloadUrl : null, // 只有解锁了才给链接
     });
-  }
 
-  res.setHeader("Allow", ["GET"]);
-  return res.status(405).end(`Method ${req.method} Not Allowed`);
+  } catch (error) {
+    console.error("获取详情失败:", error);
+    res.status(500).json({ message: "服务器错误" });
+  }
 }
 
-export default withIronSessionApiRoute(datasetDetailHandler);
+export default withIronSessionApiRoute(singleDatasetRoute);
