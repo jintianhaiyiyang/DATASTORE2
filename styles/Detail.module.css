@@ -1,162 +1,175 @@
-/* styles/Detail.module.css */
+/* styles/Detail.module.css —— 黑金商务风格 */
 
-.pageWrapper {
-  background-color: #F9FAFB;
+.mainWrapper {
+  background-color: #111827; /* 深色背景 */
   min-height: 100vh;
-  padding: 40px 24px;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .container {
-  max-width: 800px; /* 阅读体验最佳宽度 */
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 40px 24px;
 }
 
-/* --- 白底卡片容器 --- */
-.card {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  padding: 48px;
-  margin-bottom: 24px;
-}
-
-/* 面包屑/返回导航 */
 .backLink {
+  color: #9CA3AF;
+  text-decoration: none;
+  font-size: 14px;
   display: inline-block;
   margin-bottom: 24px;
-  font-size: 14px;
-  color: #6B7280;
-  font-weight: 500;
   transition: color 0.2s;
 }
 
 .backLink:hover {
-  color: #2563EB;
+  color: #ffffff;
 }
 
-/* --- 标题区域 --- */
-.header {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid #F3F4F6;
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1fr 380px; /* 左侧内容，右侧侧边栏 */
+  gap: 40px;
+}
+
+/* 响应式：手机端变为单列 */
+@media (max-width: 968px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .title {
   font-size: 36px;
   font-weight: 800;
-  color: #111827;
-  line-height: 1.2;
   margin-bottom: 16px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
-.meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 14px;
-  color: #6B7280;
+.detailCard {
+  background: #1F2937; /* 卡片深色背景 */
+  border: 1px solid #374151;
+  border-radius: 20px;
+  padding: 32px;
+  margin-top: 24px;
 }
 
-.tag {
-  background: #EFF6FF;
-  color: #2563EB;
-  padding: 4px 10px;
-  border-radius: 99px;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-/* --- 正文内容 --- */
-.content {
-  font-size: 17px;
-  line-height: 1.8;
-  color: #374151;
-  white-space: pre-wrap; /* 保留换行符 */
-}
-
-/* --- 数据集专属样式 --- */
-.priceTag {
-  display: inline-block;
-  font-size: 32px;
+.cardHeader {
+  font-size: 18px;
   font-weight: 700;
-  color: #F59E0B; /* 商务金 */
-  margin-bottom: 8px;
+  margin-bottom: 20px;
+  padding-left: 12px;
+  border-left: 4px solid #2563EB; /* 蓝色强调条 */
+  color: white;
+}
+
+.richContent {
+  line-height: 1.8;
+  color: #D1D5DB;
+  font-size: 16px;
+}
+
+/* 适配图文内容中的图片 */
+.richContent img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 20px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* 右侧操作区 sticky定位 */
+.rightCol {
+  position: sticky;
+  top: 40px;
+  height: fit-content;
+}
+
+.actionCard {
+  background: #1F2937;
+  border: 1px solid #374151;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.priceSection {
+  margin-bottom: 28px;
 }
 
 .priceLabel {
-  font-size: 14px;
   color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 24px;
+  font-size: 14px;
   display: block;
+  margin-bottom: 4px;
 }
 
-.description {
+.priceValue {
+  font-size: 36px;
+  font-weight: 800;
+  color: #F59E0B; /* 金色价格 */
+}
+
+/* 按钮样式 */
+.wechatBtn, .downloadBtn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
   font-size: 16px;
-  color: #4B5563;
-  background: #F9FAFB;
-  padding: 24px;
-  border-radius: 8px;
-  margin-bottom: 32px;
-  line-height: 1.6;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+  margin-top: 12px;
 }
 
-/* 支付区域 */
-.paySection {
-  margin-top: 32px;
-  padding-top: 32px;
-  border-top: 1px dashed #E5E7EB;
-}
+.wechatBtn { background: #07C160; color: white; } /* 微信绿 */
+.downloadBtn { background: #2563EB; color: white; } /* 下载蓝 */
 
-.payTitle {
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.wechatBtn:hover, .downloadBtn:hover { opacity: 0.9; transform: translateY(-2px); }
+.wechatBtn:active { transform: scale(0.98); }
+.wechatBtn:disabled { opacity: 0.5; cursor: not-allowed; background: #4B5563; }
 
-.payGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-}
-
-.payBtn {
+/* 微信弹窗样式 */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85); /* 深色遮罩 */
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  border: 1px solid #E5E7EB;
-  background: #fff;
-  border-radius: 8px;
-  font-weight: 500;
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.2s;
+  z-index: 9999;
 }
 
-.payBtn:hover {
-  border-color: #2563EB;
-  color: #2563EB;
-  background: #EFF6FF;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 6px -2px rgba(37, 99, 235, 0.1);
+.modalContent {
+  background: #ffffff; /* 弹窗白色背景 */
+  padding: 40px;
+  border-radius: 32px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  color: #111827;
 }
 
-.payBtnActive {
-  border-color: #2563EB;
-  background: #2563EB;
-  color: white;
+.modalTitle {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 24px;
 }
 
-.payBtnActive:hover {
-  background: #1D4ED8;
-  color: white;
+.qrWrapper {
+  background: #F3F4F6;
+  padding: 20px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.modalTip {
+  color: #4B5563;
+  font-size: 14px;
 }
