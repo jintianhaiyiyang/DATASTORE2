@@ -1,28 +1,21 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
-
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "123456";
+import { getUsers } from "../../../lib/db"; 
 
 async function loginRoute(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", ["POST"]);
-    return res.status(405).end("Method Not Allowed");
+  const { username, password } = req.body;
+  const users = await getUsers(); // ⬅️ 从 Vercel KV 获取
+
+  const user = users.find(u => 
+    (u.email === username || u.username === username) && u.password === password
+  );
+
+  if (!user) {
+    return res.status(403).json({ message: "账号或密码错误" });
   }
 
-  const { username, password } = req.body || {};
-  
-  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ success: false, message: "用户名或密码错误" });
-  }
-
-  // 登录成功，设置 session
-  req.session.user = {
-    username: ADMIN_USERNAME,
-    isLoggedIn: true,
-  };
-  
+  req.session.user = { username: user.username, email: user.email, isLoggedIn: true };
   await req.session.save();
-  return res.status(200).json({ success: true, username });
+  return res.status(200).json({ success: true });
 }
 
 export default withIronSessionApiRoute(loginRoute);
