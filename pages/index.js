@@ -1,21 +1,17 @@
 import { useEffect, useState, useMemo } from "react";
-import Head from "next/head"; // 引入 Head 以支持移动端视口设置
+import Head from "next/head";
+import Link from "next/link";
 import Layout from "../components/Layout";
-import SearchBar from "../components/SearchBar";
-import Card from "../components/Card";
 import Fuse from "fuse.js";
-import styles from "../styles/Home.module.css";
+// 我们直接在组件内写样式，保证复制过去就能用，不再依赖外部 css
+import { useRouter } from "next/router";
 
-// 核心视觉：四色柱状图大图标 (Hero 区域专用) [cite: 1, 12]
+// 核心视觉：四色柱状图大图标 (Hero 区域专用)
 const HeroLogo = () => (
-  <svg width="100" height="100" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* 红色柱 */}
+  <svg width="120" height="120" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.1))'}}>
     <rect x="2" y="14" width="6" height="16" rx="1.5" fill="#EF4444" />
-    {/* 黄色柱 */}
     <rect x="10" y="8" width="6" height="22" rx="1.5" fill="#F59E0B" />
-    {/* 绿色柱 */}
     <rect x="18" y="4" width="6" height="26" rx="1.5" fill="#10B981" />
-    {/* 蓝色柱 */}
     <rect x="26" y="0" width="6" height="30" rx="1.5" fill="#2563EB" />
   </svg>
 );
@@ -39,114 +35,87 @@ export default function HomePage() {
     });
   }, []);
 
-  // 2. 初始化文章搜索索引 
+  // 2. 初始化搜索索引
   useEffect(() => {
-    if (!articles || articles.length === 0) {
-      setArticleFuse(null);
-      return;
+    if (articles.length > 0) {
+      setArticleFuse(new Fuse(articles, { keys: ["title", "summary"], threshold: 0.35 }));
     }
-    const fuse = new Fuse(articles, {
-      includeScore: true,
-      shouldSort: true,
-      threshold: 0.35,
-      ignoreLocation: true,
-      minMatchCharLength: 1,
-      keys: [
-        { name: "title", weight: 0.45 },
-        { name: "summary", weight: 0.2 },
-        { name: "content", weight: 0.25 },
-        { name: "tags", weight: 0.1 },
-      ],
-    });
-    setArticleFuse(fuse);
-  }, [articles]);
-
-  // 3. 初始化数据集搜索索引 
-  useEffect(() => {
-    if (!datasets || datasets.length === 0) {
-      setDatasetFuse(null);
-      return;
+    if (datasets.length > 0) {
+      setDatasetFuse(new Fuse(datasets, { keys: ["name", "description"], threshold: 0.35 }));
     }
-    const fuse = new Fuse(datasets, {
-      includeScore: true,
-      shouldSort: true,
-      threshold: 0.35,
-      ignoreLocation: true,
-      minMatchCharLength: 1,
-      keys: [
-        { name: "name", weight: 0.5 },
-        { name: "description", weight: 0.3 },
-        { name: "tags", weight: 0.2 },
-      ],
-    });
-    setDatasetFuse(fuse);
-  }, [datasets]);
+  }, [articles, datasets]);
 
-  // 4. 执行搜索过滤 
-  const q = query.trim();
-
+  // 3. 执行搜索
   const filteredArticles = useMemo(() => {
-    if (!q) return articles;
-    if (!articleFuse) return [];
-    return articleFuse.search(q).map((r) => r.item);
-  }, [q, articleFuse, articles]);
+    if (!query) return articles;
+    return articleFuse ? articleFuse.search(query).map(r => r.item) : [];
+  }, [query, articleFuse, articles]);
 
   const filteredDatasets = useMemo(() => {
-    if (!q) return datasets;
-    if (!datasetFuse) return [];
-    return datasetFuse.search(q).map((r) => r.item);
-  }, [q, datasetFuse, datasets]);
+    if (!query) return datasets;
+    return datasetFuse ? datasetFuse.search(query).map(r => r.item) : [];
+  }, [query, datasetFuse, datasets]);
 
-  const articleCount = filteredArticles.length;
-  const datasetCount = filteredDatasets.length;
-  const totalCount = articleCount + datasetCount;
+  const totalCount = filteredArticles.length + filteredDatasets.length;
 
   return (
     <Layout title="数据小商店 - 首页">
       <Head>
-        {/* 关键：设置视口元标签以支持移动端自适应渲染 */}
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       
-      <div className={styles.pageWrapper}>
+      {/* 全局深色背景容器 */}
+      <div style={{ backgroundColor: '#111827', minHeight: '100vh', color: 'white', fontFamily: 'sans-serif' }}>
         
-        {/* Hero 区域：简约、居中、商务  */}
-        <section className={styles.hero}>
-          <div className={styles.heroInner}>
-            <div className={styles.heroIcon} style={{ background: 'transparent', boxShadow: 'none', width: 'auto', height: 'auto' }}>
-              <HeroLogo />
-            </div>
-            
-            <h1 className={styles.heroTitle}>数据小商店</h1>
-            <p className={styles.heroSubtitle}>
-              精选行业数据集与深度分析文章，赋能商业决策
-            </p>
-            
-            <div className={styles.heroStats}>
-              <div className={styles.statItem}>
-                <strong>{articles.length}</strong> 篇深度文章
-              </div>
-              <div className={styles.statDivider}></div>
-              <div className={styles.statItem}>
-                <strong>{datasets.length}</strong> 个数据集
-              </div>
-            </div>
+        {/* Hero 区域 */}
+        <section style={{ 
+          textAlign: 'center', 
+          padding: '80px 20px', 
+          background: 'radial-gradient(circle at center, #1F2937 0%, #111827 100%)' 
+        }}>
+          <div style={{ marginBottom: '30px' }}><HeroLogo /></div>
+          <h1 style={{ 
+            fontSize: '3.5rem', 
+            fontWeight: '800', 
+            marginBottom: '16px', 
+            background: 'linear-gradient(to right, #60A5FA, #A78BFA)', 
+            WebkitBackgroundClip: 'text', 
+            WebkitTextFillColor: 'transparent' 
+          }}>
+            数据小商店
+          </h1>
+          <p style={{ color: '#9CA3AF', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
+            精选行业数据集与深度分析文章，赋能商业决策
+          </p>
+          
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', marginTop: '40px', color: '#D1D5DB' }}>
+            <div><strong style={{fontSize: '24px', color: 'white'}}>{articles.length}</strong> 篇深度文章</div>
+            <div style={{width: '1px', background: '#374151'}}></div>
+            <div><strong style={{fontSize: '24px', color: 'white'}}>{datasets.length}</strong> 个数据集</div>
           </div>
         </section>
 
-        {/* 搜索与过滤区域  */}
-        <section className={styles.searchSection}>
-          <div className={styles.searchWrapper}>
-            <SearchBar 
+        {/* 搜索与 Tab 栏 (吸顶效果) */}
+        <section style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(17, 24, 39, 0.95)', backdropFilter: 'blur(10px)', padding: '20px 0', borderBottom: '1px solid #374151' }}>
+          <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 20px' }}>
+            <input 
               value={query} 
-              onChange={setQuery} 
-              className={styles.searchInput} 
-              placeholder="搜索文章关键词或数据集名称..."
+              onChange={(e) => setQuery(e.target.value)} 
+              placeholder="🔍 搜索文章关键词或数据集名称..."
+              style={{
+                width: '100%',
+                padding: '16px 24px',
+                borderRadius: '50px',
+                border: '1px solid #4B5563',
+                background: '#1F2937',
+                color: 'white',
+                fontSize: '16px',
+                outline: 'none',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}
             />
-          </div>
-          
-          <div className={styles.searchMeta}>
-            <div className={styles.tabGroup}>
+            
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
               {[
                 { key: "all", label: "全部资源" },
                 { key: "article", label: "文章分析" },
@@ -154,75 +123,81 @@ export default function HomePage() {
               ].map((tab) => (
                 <button
                   key={tab.key}
-                  className={`${styles.tabButton} ${activeTab === tab.key ? styles.active : ""}`}
                   onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '20px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    background: activeTab === tab.key ? '#2563EB' : '#374151',
+                    color: activeTab === tab.key ? 'white' : '#9CA3AF',
+                    transition: 'all 0.2s'
+                  }}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
-
-            <div className={styles.searchSummary}>
-              {q ? (
-                <span>搜索结果：共 <strong>{totalCount}</strong> 条</span>
-              ) : (
-                <span>浏览精选资源</span>
-              )}
-            </div>
+            
+            {query && <div style={{textAlign: 'center', marginTop: '10px', color: '#9CA3AF', fontSize: '12px'}}>
+              搜索结果：共 {totalCount} 条
+            </div>}
           </div>
         </section>
 
-        {/* 主要内容区域  */}
-        <main className={styles.container}>
+        {/* 主要内容区域 */}
+        <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
           
           {/* 文章列表 */}
-          {(activeTab === "all" || activeTab === "article") && (
-            <section className={styles.contentSection}>
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.sectionTitle}>精选文章</h2>
-                <span className={styles.sectionSubtitle}>深度解析与专业洞见</span>
-              </div>
-              
-              <div className={styles.cardGrid}>
+          {(activeTab === "all" || activeTab === "article") && filteredArticles.length > 0 && (
+            <section style={{ marginBottom: '60px' }}>
+              <h2 style={{ fontSize: '24px', marginBottom: '24px', borderLeft: '4px solid #F59E0B', paddingLeft: '12px' }}>精选文章</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
                 {filteredArticles.map((a) => (
-                  <div key={a.id} className={styles.cardWrapper}>
-                    <Card type="article" item={a} />
-                  </div>
+                  <Link href={`/article/${a.id}`} key={a.id} style={{textDecoration: 'none'}}>
+                    <div style={{ background: '#1F2937', borderRadius: '16px', padding: '24px', height: '100%', border: '1px solid #374151', transition: 'transform 0.2s' }}
+                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'}
+                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                      <div style={{ marginBottom: '12px', fontSize: '20px' }}>📄</div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>{a.title}</h3>
+                      <p style={{ color: '#9CA3AF', fontSize: '14px', lineHeight: '1.6' }}>{a.summary || '暂无摘要'}</p>
+                    </div>
+                  </Link>
                 ))}
               </div>
-              
-              {filteredArticles.length === 0 && (
-                <div className={styles.emptyState}>
-                  <div className={styles.emptyIcon}>📄</div>
-                  <p>未找到相关文章，换个关键词试试？</p>
-                </div>
-              )}
             </section>
           )}
 
           {/* 数据集列表 */}
-          {(activeTab === "all" || activeTab === "dataset") && (
-            <section className={styles.contentSection}>
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.sectionTitle}>数据集市</h2>
-                <span className={styles.sectionSubtitle}>清洗完毕的高质量数据源</span>
-              </div>
-              
-              <div className={styles.cardGrid}>
+          {(activeTab === "all" || activeTab === "dataset") && filteredDatasets.length > 0 && (
+            <section>
+              <h2 style={{ fontSize: '24px', marginBottom: '24px', borderLeft: '4px solid #10B981', paddingLeft: '12px' }}>数据集市</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
                 {filteredDatasets.map((d) => (
-                  <div key={d.id} className={styles.cardWrapper}>
-                    <Card type="dataset" item={d} />
-                  </div>
+                  <Link href={`/dataset/${d.id}`} key={d.id} style={{textDecoration: 'none'}}>
+                    <div style={{ background: '#1F2937', borderRadius: '16px', padding: '24px', height: '100%', border: '1px solid #374151', position: 'relative', transition: 'transform 0.2s' }}
+                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'}
+                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
+                        <div style={{ background: '#065F46', color: '#6EE7B7', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>DATA</div>
+                        <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>¥{d.price}</span>
+                      </div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>{d.name}</h3>
+                      <p style={{ color: '#9CA3AF', fontSize: '14px', lineHeight: '1.6', marginBottom: '20px' }}>{d.description}</p>
+                      <div style={{ color: '#60A5FA', fontSize: '14px', fontWeight: 'bold' }}>立即查看 →</div>
+                    </div>
+                  </Link>
                 ))}
               </div>
-              
-              {filteredDatasets.length === 0 && (
-                <div className={styles.emptyState}>
-                  <div className={styles.emptyIcon}>📊</div>
-                  <p>未找到相关数据集，换个关键词试试？</p>
-                </div>
-              )}
             </section>
+          )}
+          
+          {totalCount === 0 && (
+             <div style={{ textAlign: 'center', padding: '60px', color: '#6B7280' }}>
+               <p style={{ fontSize: '18px' }}>🔍 没有找到相关资源，请尝试其他关键词</p>
+             </div>
           )}
         </main>
       </div>
