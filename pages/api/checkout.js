@@ -1,6 +1,6 @@
 import { withIronSessionApiRoute } from "../../lib/session";
 import WxPay from 'wechatpay-node-v3';
-import { getDatasets } from "../../lib/db"; // ⬅️ 确保引入了获取数据的函数
+import { getDatasets } from "../../lib/db"; // ⬅️ 现在能找到这个函数了
 
 async function checkoutHandler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -10,12 +10,13 @@ async function checkoutHandler(req, res) {
   const { datasetId } = req.body;
   
   try {
-    // 1. 获取该数据集的真实价格
+    // 1. 获取数据集并动态计算价格
     const datasets = await getDatasets();
     const dataset = datasets.find(d => d.id === Number(datasetId));
-    if (!dataset) throw new Error("资源不存在");
+    
+    if (!dataset) throw new Error("资源不存在或已下架");
 
-    // 微信支付单位是分，需将元转成分
+    // 🔴 核心修复：0.02 元转为 2 分
     const amountInCents = Math.round(dataset.price * 100); 
 
     const outTradeNo = `ORDER_${Date.now()}`;
@@ -30,21 +31,22 @@ async function checkoutHandler(req, res) {
       key: process.env.WX_API_V3_KEY,
     });
 
+    // 2. 请求微信统一下单
     const result = await wxpay.transactions_native({
       appid: process.env.WX_APP_ID,
       mchid: process.env.WX_MCH_ID,
-      description: `购买数据: ${dataset.name}`,
+      description: `购买: ${dataset.name}`,
       out_trade_no: outTradeNo,
       notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
-      amount: { total: amountInCents, currency: 'CNY' }, // ⬅️ 修复：使用动态价格
+      amount: { total: amountInCents, currency: 'CNY' }, // 这里的 total 现在是动态的了
       attach: JSON.stringify({ datasetId, email: user.email })
     });
 
     const codeUrl = result.code_url || (result.data && result.data.code_url);
-    // 返回 orderId (即 outTradeNo) 供前端轮询
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
     
   } catch (err) {
+    console.error("支付初始化错误:", err);
     return res.status(500).json({ message: "支付初始化失败: " + err.message });
   }
 }
