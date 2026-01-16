@@ -3,19 +3,54 @@ import { getUsers } from "../../../lib/db";
 
 async function loginRoute(req, res) {
   const { username, password } = req.body;
-  const users = await getUsers(); // ⬅️ 从 Vercel KV 获取
 
-  const user = users.find(u => 
-    (u.email === username || u.username === username) && u.password === password
-  );
+  // ==========================================
+  // 🛡️ 1. 超级管理员通道 (Special Account)
+  // ==========================================
+  // 您可以在 Vercel 环境变量里设置，或者直接用下面的默认值
+  const ADMIN_USER = process.env.ADMIN_USERNAME || "admin";
+  const ADMIN_PASS = process.env.ADMIN_PASSWORD || "admin123"; // 您的特殊密码
 
-  if (!user) {
-    return res.status(403).json({ message: "账号或密码错误" });
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    // 颁发管理员 Session
+    req.session.user = {
+      username: ADMIN_USER,
+      isAdmin: true, // 🟢 关键：标记为管理员
+      isLoggedIn: true,
+    };
+    await req.session.save();
+    return res.status(200).json({ success: true, username: ADMIN_USER });
   }
 
-  req.session.user = { username: user.username, email: user.email, isLoggedIn: true };
-  await req.session.save();
-  return res.status(200).json({ success: true });
+  // ==========================================
+  // 👤 2. 普通用户通道 (查云数据库)
+  // ==========================================
+  try {
+    const users = await getUsers(); // 从 Vercel KV 获取
+    
+    // 支持邮箱或用户名登录
+    const user = users.find(u => 
+      (u.email === username || u.username === username) && u.password === password
+    );
+
+    if (!user) {
+      return res.status(403).json({ message: "账号或密码错误" });
+    }
+
+    // 颁发普通用户 Session
+    req.session.user = { 
+      username: user.username, 
+      email: user.email, 
+      isAdmin: false, // 🔴 普通用户没有权限
+      isLoggedIn: true 
+    };
+    
+    await req.session.save();
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("登录出错:", error);
+    return res.status(500).json({ message: "服务器内部错误" });
+  }
 }
 
 export default withIronSessionApiRoute(loginRoute);
