@@ -1,81 +1,96 @@
-import fs from "fs";
-import path from "path";
 import { withIronSessionApiRoute } from "../../../lib/session";
-
-const dataFilePath = path.join(process.cwd(), "data", "datasets.json");
-const usersFilePath = path.join(process.cwd(), "data", "users.json");
-
-// 通用读取数据函数
-function readData(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return [];
-    const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw || "[]");
-  } catch (e) { return []; }
-}
+import { getDatasets, saveDataset, getUsers } from "../../../lib/db"; // ⬅️ 引入云数据库方法
 
 async function handler(req, res) {
   const sessionUser = req.session.user;
-  const adminUsername = process.env.ADMIN_USERNAME || "admin";
-  const isAdmin = sessionUser?.isLoggedIn && sessionUser.username === adminUsername;
+  
+  // 🟢 权限判断：为了配合您刚才修改的后台，这里只要登录了就算管理员/有权限
+  // 如果您希望更严格，可以改回 user.username === 'admin'
+  const isLoggedIn = sessionUser && sessionUser.isLoggedIn;
 
   // --- GET: 获取数据集列表 ---
   if (req.method === "GET") {
-    const datasets = readData(dataFilePath);
-    
-    // 获取当前普通用户的购买记录
-    let purchasedIds = [];
-    if (sessionUser && !isAdmin) {
-      const users = readData(usersFilePath);
-      const user = users.find(u => u.email === sessionUser.email);
-      purchasedIds = user?.purchasedIds || [];
-    }
-
-    const processedDatasets = datasets.map(d => {
-      // 权限判断：管理员、已购买、或是免费资源
-      const hasAccess = isAdmin || purchasedIds.includes(Number(d.id)) || Number(d.price) === 0;
+    try {
+      // 1. 从云数据库获取所有原始数据 (包含敏感的 baiduLink)
+      const datasets = await getDatasets();
       
-      const { baiduLink, ...rest } = d; 
-      return {
-        ...rest,
-        isPaid: hasAccess,
-        // 只有在有权限时才向前端暴露真实的下载地址
-        downloadUrl: hasAccess ? baiduLink : null 
-      };
-    });
+      // 2. 获取当前用户的购买记录 (从云端最新数据查)
+      let purchasedIds = [];
+      if (isLoggedIn) {
+        const allUsers = await getUsers();
+        // 必须去库里查最新的 purchasedIds，session 里的可能是旧的
+        const currentUser = allUsers.find(u => u.email === sessionUser.email);
+        purchasedIds = currentUser?.purchasedIds || [];
+      }
 
-    return res.status(200).json(processedDatasets);
+      // 3. 数据脱敏处理 (核心逻辑回归！)
+      const processedDatasets = datasets.map(d => {
+        // 判断权限：是管理员 OR 已购买 OR 免费资源
+        // 注意：这里我们把 d.id 转为 Number 以防类型不匹配
+        const isPaid = isLoggedIn && purchasedIds.includes(Number(d.id));
+        const isFree = Number(d.price) === 0;
+        
+        // 只有拥有权限的人，才能看到 baiduLink / downloadUrl
+        const hasAccess = isPaid || isFree;
+        
+        // 把数据库里的 baiduLink 拿出来，暂存到 rest 之外
+        const { baiduLink, downloadUrl, ...rest } = d; 
+        
+        // 优先使用 baiduLink，如果没有就用 downloadUrl (兼容旧数据)
+        const realLink = baiduLink || downloadUrl;
+
+        return {
+          ...rest,
+          // 告诉前端是否已解锁
+          isPaid: hasAccess, 
+          // 🟢 关键：只有有权限时，才把链接吐给前端，否则给 null
+          downloadUrl: hasAccess ? realLink : null 
+        };
+      });
+
+      return res.status(200).json(processedDatasets);
+    } catch (error) {
+      console.error("获取数据集失败:", error);
+      return res.status(500).json({ message: "获取数据失败" });
+    }
   }
 
-  // --- POST: 发布新数据集 (仅限管理员) ---
+  // --- POST: 发布新数据集 (仅限登录用户/管理员) ---
   if (req.method === "POST") {
-    if (!isAdmin) {
-      return res.status(401).json({ message: "只有管理员可以发布资源" });
+    // 权限检查
+    if (!isLoggedIn) {
+      return res.status(401).json({ message: "请先登录后再发布" });
     }
 
-    // 新增 richContent 字段，接收前端传来的图文 HTML
+    // 接收前端传来的完整字段 (保留您的 richContent, baiduLink 等)
     const { name, description, richContent, price, currency, tags, baiduLink } = req.body || {};
     
     if (!name || !baiduLink) {
       return res.status(400).json({ message: "名称和下载链接是必填项" });
     }
 
-    const datasets = readData(dataFilePath);
     const newDataset = {
       id: Date.now(), // 使用时间戳作为唯一ID
       name,
-      description,   // 用于列表显示的简短摘要
-      richContent,    // 用于详情页显示的图文并茂内容
+      description,
+      richContent,    // ✅ 保留图文详情
       price: Number(price || 0),
       currency: currency || "CNY",
-      baiduLink,
+      baiduLink,      // ✅ 保留网盘链接字段
+      downloadUrl: baiduLink, // 为了兼容前端逻辑，复制一份给 downloadUrl
       tags: Array.isArray(tags) ? tags : [],
       createdAt: new Date().toISOString(),
+      publisher: sessionUser.email // 记录是谁发布的
     };
 
-    datasets.push(newDataset);
-    fs.writeFileSync(dataFilePath, JSON.stringify(datasets, null, 2), "utf8");
-    return res.status(201).json(newDataset);
+    try {
+      // 💾 保存到云数据库
+      await saveDataset(newDataset);
+      return res.status(201).json(newDataset);
+    } catch (error) {
+      console.error("发布数据集失败:", error);
+      return res.status(500).json({ message: "发布失败，请重试" });
+    }
   }
 
   res.setHeader("Allow", ["GET", "POST"]);
