@@ -1,48 +1,68 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
-import { getDatasets, getUsers } from "../../../lib/db";
+import { getDatasets, updateDataset, deleteDataset, getUsers } from "../../../lib/db";
 
-async function singleDatasetRoute(req, res) {
+async function handler(req, res) {
   const { id } = req.query;
-  const datasetId = Number(id);
+  const user = req.session.user;
+  const isLoggedIn = user && user.isLoggedIn;
+  const isAdmin = isLoggedIn && user.isAdmin; // 只有管理员能改
 
-  try {
-    // 1. 获取所有数据集
+  // --- GET: 获取单个详情 ---
+  if (req.method === "GET") {
     const datasets = await getDatasets();
-    const dataset = datasets.find((d) => d.id === datasetId);
+    const dataset = datasets.find(d => Number(d.id) === Number(id));
+    if (!dataset) return res.status(404).json({ message: "资源不存在" });
 
-    if (!dataset) {
-      return res.status(404).json({ message: "资源不存在" });
-    }
-
-    // 2. 检查权限 (核心修改)
-    let isPaid = false;
-    const user = req.session.user;
-
-    if (user && user.isLoggedIn) {
-      // 🟢 关键：不要只看 Session，要去 KV 数据库查最新的用户数据
-      // 因为 Session 里的数据可能是登录时存的旧数据
+    // 权限检查：是否已购买
+    let purchasedIds = [];
+    if (isLoggedIn) {
       const allUsers = await getUsers();
-      const freshUser = allUsers.find(u => u.email === user.email);
-
-      if (freshUser && freshUser.purchasedIds && freshUser.purchasedIds.includes(datasetId)) {
-        isPaid = true;
-      }
+      const currentUser = allUsers.find(u => u.email === user.email);
+      purchasedIds = currentUser?.purchasedIds || [];
     }
+    
+    const isPaid = isLoggedIn && purchasedIds.includes(Number(id));
+    const isFree = Number(dataset.price) === 0;
+    const hasAccess = isPaid || isFree || isAdmin;
 
-    // 3. 构建返回数据
-    // 如果没付钱，就把 downloadUrl 藏起来，不返回给前端
-    const { downloadUrl, ...publicData } = dataset;
+    const { baiduLink, downloadUrl, ...rest } = dataset;
+    const realLink = baiduLink || downloadUrl;
 
-    res.json({
-      ...publicData,
-      isPaid: isPaid, // 告诉前端是否已解锁
-      downloadUrl: isPaid ? downloadUrl : null, // 只有解锁了才给链接
+    return res.json({
+      ...rest,
+      isPaid: hasAccess,
+      downloadUrl: hasAccess ? realLink : null
     });
-
-  } catch (error) {
-    console.error("获取详情失败:", error);
-    res.status(500).json({ message: "服务器错误" });
   }
+
+  // --- PUT: 修改数据集 (管理员) ---
+  if (req.method === "PUT") {
+    if (!isAdmin) return res.status(403).json({ message: "无权操作" });
+    
+    try {
+      // 这里的 req.body 包含了要修改的字段
+      const updated = await updateDataset(id, req.body);
+      if (updated) return res.json(updated);
+      return res.status(404).json({ message: "更新失败，未找到该数据集" });
+    } catch (e) {
+      return res.status(500).json({ message: e.message });
+    }
+  }
+
+  // --- DELETE: 删除数据集 (管理员) ---
+  if (req.method === "DELETE") {
+    if (!isAdmin) return res.status(403).json({ message: "无权操作" });
+    
+    try {
+      await deleteDataset(id);
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ message: e.message });
+    }
+  }
+
+  res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
+  return res.status(405).end(`Method ${req.method} Not Allowed`);
 }
 
-export default withIronSessionApiRoute(singleDatasetRoute);
+export default withIronSessionApiRoute(handler);
