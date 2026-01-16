@@ -8,11 +8,8 @@ export default function AdminPage() {
   const [isAuthed, setIsAuthed] = useState(false);
   const [user, setUser] = useState(null);
 
-  // 登录表单状态
-  const [loginForm, setLoginForm] = useState({
-    username: "",
-    password: "",
-  });
+  // 登录表单
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginMsg, setLoginMsg] = useState("");
 
   const [articles, setArticles] = useState([]);
@@ -23,29 +20,28 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/articles");
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setArticles(data);
-      }
-    } catch (e) {
-      console.error("fetch articles error", e);
-    }
+      if (Array.isArray(data)) setArticles(data);
+    } catch (e) { console.error("fetch error", e); }
   }
 
-  // 2. 初始化校验权限 (核心修复：去掉 username === 'admin' 限制)
+  // 2. 权限校验 (核心修改：只认 isAdmin 金牌)
   useEffect(() => {
     const run = async () => {
       try {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
         
-        // 🟢 只要 isLoggedIn 为 true 即可进入后台
-        if (data.isLoggedIn) {
+        // 🟢 只有 data.isAdmin === true 才能进
+        if (data.isLoggedIn && data.isAdmin) {
           setIsAuthed(true);
           setUser(data);
           await fetchArticles();
+        } else if (data.isLoggedIn && !data.isAdmin) {
+          // 如果是普通用户登录了，提示权限不足
+          setLoginMsg("⚠️ 您的账号是普通用户，无权访问后台");
         }
       } catch (e) {
-        console.error("check auth error", e);
+        console.error("auth check error", e);
       } finally {
         setCheckingAuth(false);
       }
@@ -53,10 +49,10 @@ export default function AdminPage() {
     run();
   }, []);
 
-  // 3. 登录逻辑
+  // 3. 登录提交
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setLoginMsg("登录中...");
+    setLoginMsg("验证中...");
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -66,50 +62,55 @@ export default function AdminPage() {
       const data = await res.json();
       
       if (res.ok && data.success) {
-        setIsAuthed(true);
-        // 登录成功后刷新页面，确保状态完全同步
-        window.location.reload();
+        // 登录成功后刷新页面，让 useEffect 重新检查 isAdmin 权限
+        window.location.reload(); 
       } else {
-        setLoginMsg(data.message || "登录失败");
+        setLoginMsg(data.message || "账号或密码错误");
       }
     } catch (err) {
       setLoginMsg("网络请求异常");
     }
   };
 
-  // 4. 退出逻辑
+  // 4. 退出登录
   const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch (e) { /* ignore */ }
+    await fetch("/api/auth/logout", { method: "POST" });
     window.location.reload();
   };
 
   if (checkingAuth) {
     return (
       <Layout title="验证中...">
-        <div style={{padding: '50px', textAlign: 'center', color: '#fff'}}>
-          ⌛️ 正在验证身份权限...
+        <div style={{padding:'50px', textAlign:'center', color:'#fff'}}>
+          ⌛️ 正在验证权限...
         </div>
       </Layout>
     );
   }
 
-  // --- 登录界面 (未登录时显示) ---
+  // --- 未授权 / 登录界面 ---
   if (!isAuthed) {
     return (
       <Layout title="后台登录">
         <div className={styles.container}>
           <div className={styles.loginContainer} style={{maxWidth: '400px', margin: '80px auto', padding: '40px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)'}}>
-            <h1 style={{ marginBottom: '24px', textAlign: 'center', color: '#111', fontSize: '24px' }}>后台管理系统</h1>
+            <h1 style={{ marginBottom: '24px', textAlign: 'center', color: '#111', fontSize: '24px' }}>🔒 管理员入口</h1>
             <p style={{ marginBottom: '24px', color: '#666', fontSize: '14px', textAlign: 'center' }}>
-              请登录以管理内容
+              只有管理员账号可进入
             </p>
+            
+            {/* 权限不足提示 */}
+            {loginMsg && loginMsg.includes("普通用户") && (
+              <div style={{background: '#FEE2E2', color: '#B91C1C', padding: '10px', borderRadius: '6px', marginBottom: '20px', fontSize: '14px', textAlign: 'center'}}>
+                ⛔️ 权限不足：请注销普通账号，使用管理员账号登录
+              </div>
+            )}
+
             <form className={styles.form} onSubmit={handleLoginSubmit}>
               <div style={{ marginBottom: '16px' }}>
                 <input
                   style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px' }}
-                  placeholder="邮箱 / 用户名"
+                  placeholder="管理员账号 (默认: admin)"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm((prev) => ({ ...prev, username: e.target.value }))}
                   required
@@ -119,19 +120,18 @@ export default function AdminPage() {
                 <input
                   style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px' }}
                   type="password"
-                  placeholder="密码"
+                  placeholder="管理员密码 (默认: admin123)"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
                   required
                 />
               </div>
               <button type="submit" style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>
-                立即登录
+                验证身份
               </button>
-              {loginMsg && (
-                <p style={{ marginTop: '16px', color: loginMsg.includes('成功') ? 'green' : 'red', textAlign: 'center' }}>
-                  {loginMsg}
-                </p>
+              
+              {loginMsg && !loginMsg.includes("普通用户") && (
+                <p style={{ marginTop: '16px', color: 'red', textAlign: 'center' }}>{loginMsg}</p>
               )}
             </form>
           </div>
@@ -140,36 +140,26 @@ export default function AdminPage() {
     );
   }
 
-  // --- 主管理界面 (已登录显示) ---
+  // --- 已授权：后台管理界面 ---
   return (
     <Layout title="后台发布中心">
       <div className={styles.container}>
         <div className={styles.card}>
           <div className={styles.header}>
-            <h1>🛠️ 后台控制台</h1>
+            <h1>🛠️ 超级管理后台</h1>
             <div className={styles.userInfo}>
-              <span style={{marginRight: '15px'}}>管理员: {user?.username || user?.email}</span>
+              <span style={{marginRight: '15px', color: 'green', fontWeight: 'bold'}}>✓ 已认证: {user?.username}</span>
               <button type="button" className={styles.logoutBtn} onClick={handleLogout}>退出</button>
             </div>
           </div>
 
           <div className={styles.tip}>
-            💡 提示：本后台用于发布“图文并茂”的数据集及文章内容。
+            💡 提示：在此处发布的内容将实时同步到云数据库。
           </div>
 
           <div className={styles.tabs}>
-            <button
-              className={`${styles.tabBtn} ${tab === "article" ? styles.active : ""}`}
-              onClick={() => setTab("article")}
-            >
-              文章管理
-            </button>
-            <button
-              className={`${styles.tabBtn} ${tab === "dataset" ? styles.active : ""}`}
-              onClick={() => setTab("dataset")}
-            >
-              数据集管理
-            </button>
+            <button className={`${styles.tabBtn} ${tab === "article" ? styles.active : ""}`} onClick={() => setTab("article")}>文章管理</button>
+            <button className={`${styles.tabBtn} ${tab === "dataset" ? styles.active : ""}`} onClick={() => setTab("dataset")}>数据集发布</button>
           </div>
 
           {tab === "article" ? (
@@ -188,7 +178,11 @@ export default function AdminPage() {
   );
 }
 
-// --- 子组件：文章管理区块 ---
+// ==========================================
+// 👇 下面是完整的子组件，请勿删除
+// ==========================================
+
+// --- 文章管理子组件 ---
 function ArticleAdminSection({ articles, editingArticle, setEditingArticle, refreshArticles }) {
   return (
     <>
@@ -253,7 +247,7 @@ function ArticleAdminSection({ articles, editingArticle, setEditingArticle, refr
   );
 }
 
-// --- 子组件：文章发布表单 ---
+// --- 文章表单 ---
 function ArticleForm({ editingArticle, onSaved, onCancelEdit }) {
   const isEdit = !!editingArticle;
   const [form, setForm] = useState({
@@ -316,7 +310,7 @@ function ArticleForm({ editingArticle, onSaved, onCancelEdit }) {
   );
 }
 
-// --- 子组件：数据集发布表单 ---
+// --- 数据集表单 (含 richContent, baiduLink) ---
 function DatasetForm() {
   const [form, setForm] = useState({
     name: "",
@@ -370,8 +364,8 @@ function DatasetForm() {
           <textarea className={styles.textarea} rows={10} value={form.richContent} onChange={(e) => setForm({...form, richContent: e.target.value})} placeholder="输入图文介绍 HTML..." />
         </div>
         <div>
-          <label>网盘/下载链接</label>
-          <input className={styles.input} value={form.baiduLink} onChange={(e) => setForm({...form, baiduLink: e.target.value})} required placeholder="用户支付后可见的链接" />
+          <label>网盘/下载链接 (支付后可见)</label>
+          <input className={styles.input} value={form.baiduLink} onChange={(e) => setForm({...form, baiduLink: e.target.value})} required placeholder="例如: https://pan.baidu.com/..." />
         </div>
         <div>
           <label>标签 (逗号分隔)</label>
