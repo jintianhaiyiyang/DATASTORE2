@@ -1,11 +1,11 @@
-/* styles/Home.module.css - 黑金商务版 */
+/* styles/Home.module.css - 完美适配版 */
 
 .container {
-  min-height: 100vh;
-  padding: 0 0 60px 0;
+  /* 移除 min-height，让 Layout 控制高度，防止双滚动条 */
+  width: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #111827; /* 深色背景 */
+  background-color: #111827;
   color: #E5E7EB;
   font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
 }
@@ -14,6 +14,7 @@
 .heroSection {
   text-align: center;
   padding: 100px 20px 80px;
+  /* 调整渐变，使其与 Layout 的 Nav 融合 */
   background: radial-gradient(circle at center, #1F2937 0%, #111827 70%);
   border-bottom: 1px solid #374151;
 }
@@ -23,7 +24,6 @@
   font-weight: 800;
   margin: 0 0 16px;
   line-height: 1.1;
-  /* 金蓝渐变文字 */
   background: linear-gradient(to right, #60A5FA, #A78BFA);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -48,7 +48,7 @@
 
 .statItem strong {
   font-size: 24px;
-  color: #F59E0B; /* 金色数字 */
+  color: #F59E0B;
   display: block;
 }
 
@@ -61,9 +61,10 @@
 /* 搜索栏吸顶条 */
 .searchBarSticky {
   position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(17, 24, 39, 0.95); /* 毛玻璃深色 */
+  /* 因为 Layout 的 Nav 高度是 64px，所以这里 top 设为 63px 以刚好贴合 */
+  top: 63px; 
+  z-index: 90;
+  background: rgba(17, 24, 39, 0.95);
   backdrop-filter: blur(12px);
   padding: 20px 0;
   border-bottom: 1px solid #374151;
@@ -80,7 +81,7 @@
   width: 100%;
   padding: 16px 24px;
   border-radius: 50px;
-  border: 1px solid #4B5563;
+  border: 1px solid #374151;
   background: #1F2937;
   color: white;
   font-size: 16px;
@@ -113,11 +114,10 @@
 }
 
 .tabBtnActive {
-  background: #2563EB; /* 激活蓝 */
+  background: #2563EB;
   color: white;
 }
 
-/* 内容主区域 */
 .main {
   max-width: 1200px;
   margin: 0 auto;
@@ -135,7 +135,6 @@
   font-weight: 700;
 }
 
-/* 卡片网格 */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -158,7 +157,7 @@
 .card:hover {
   transform: translateY(-5px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-  border-color: #4B5563;
+  border-color: #60A5FA; /* 悬浮时边框变蓝 */
 }
 
 .cardIcon {
@@ -193,7 +192,6 @@
   line-height: 1.6;
   flex-grow: 1;
   margin-bottom: 20px;
-  /* 多行省略 */
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -227,8 +225,8 @@
   font-size: 18px;
 }
 
-/* 响应式调整 */
 @media (max-width: 600px) {
   .heroTitle { font-size: 2.5rem; }
   .grid { grid-template-columns: 1fr; }
+  .searchBarSticky { top: 63px; }
 }
