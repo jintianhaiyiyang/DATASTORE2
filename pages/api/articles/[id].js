@@ -1,76 +1,53 @@
-import fs from "fs";
-import path from "path";
 import { withIronSessionApiRoute } from "../../../lib/session";
+// 引入云数据库操作方法 (获取列表、删除文章)
+import { getArticles, deleteArticle } from "../../../lib/db";
 
-// 数据文件路径
-const filePath = path.join(process.cwd(), "data", "articles.json");
-
-async function articleDetailHandler(req, res) {
+async function articleDetailRoute(req, res) {
   const { id } = req.query;
 
-  // 1. 读取数据
-  let articles = [];
-  try {
-    if (fs.existsSync(filePath)) {
-      const fileContents = fs.readFileSync(filePath, "utf8");
-      articles = JSON.parse(fileContents || "[]");
-    }
-  } catch (e) {
-    return res.status(500).json({ message: "数据读取失败" });
-  }
-
-  const articleIndex = articles.findIndex((a) => a.id.toString() === id.toString());
-  const article = articles[articleIndex];
-
-  // 如果找不到文章，统一返回 404
-  if (!article) {
-    return res.status(404).json({ message: "文章不存在" });
-  }
-
-  // --- GET: 获取详情 (公开) ---
+  // --- GET: 获取文章详情 (公开) ---
   if (req.method === "GET") {
-    return res.status(200).json(article);
+    try {
+      // 1. 从云数据库获取所有文章
+      const articles = await getArticles();
+      
+      // 2. 查找匹配 ID 的文章
+      // 注意：存进去的 ID 可能是数字也可能是字符串，统一转字符串比较最稳妥
+      const article = articles.find((a) => String(a.id) === String(id));
+
+      if (!article) {
+        return res.status(404).json({ message: "文章不存在或已删除" });
+      }
+
+      return res.json(article);
+    } catch (error) {
+      console.error("获取文章详情失败:", error);
+      return res.status(500).json({ message: "服务器内部错误" });
+    }
   }
 
-  // --- 🔒 以下操作都需要登录权限 ---
-  const user = req.session.user;
-  if (!user || !user.isLoggedIn) {
-    return res.status(401).json({ message: "未授权：请先登录" });
-  }
-
-  // --- PUT: 修改文章 (私有) ---
-  if (req.method === "PUT") {
-    const { title, summary, content, tags } = req.body;
-
-    // 更新字段
-    const updatedArticle = {
-      ...article,
-      title: title || article.title,
-      summary: summary || article.summary,
-      content: content || article.content,
-      tags: tags || article.tags,
-      updatedAt: new Date().toISOString(), // 更新修改时间
-    };
-
-    articles[articleIndex] = updatedArticle;
-    
-    // 保存文件
-    fs.writeFileSync(filePath, JSON.stringify(articles, null, 2));
-    
-    return res.status(200).json(updatedArticle);
-  }
-
-  // --- DELETE: 删除文章 (私有) ---
+  // --- DELETE: 删除文章 (仅管理员) ---
   if (req.method === "DELETE") {
-    const newArticles = articles.filter((a) => a.id.toString() !== id.toString());
-    fs.writeFileSync(filePath, JSON.stringify(newArticles, null, 2));
-    return res.status(200).json({ success: true });
+    const user = req.session.user;
+    
+    // 权限检查：必须登录且是管理员
+    if (!user || !user.isLoggedIn || !user.isAdmin) {
+      return res.status(403).json({ message: "无权操作：需要管理员权限" });
+    }
+
+    try {
+      // 调用 db.js 中的删除方法
+      await deleteArticle(id);
+      return res.status(200).json({ success: true, message: "文章已删除" });
+    } catch (e) {
+      console.error("删除文章失败:", e);
+      return res.status(500).json({ message: "删除失败: " + e.message });
+    }
   }
 
-  // 其他方法
-  res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
+  // 其他方法不支持
+  res.setHeader("Allow", ["GET", "DELETE"]);
   return res.status(405).end(`Method ${req.method} Not Allowed`);
 }
 
-// 必须用 iron-session 包裹
-export default withIronSessionApiRoute(articleDetailHandler);
+export default withIronSessionApiRoute(articleDetailRoute);
