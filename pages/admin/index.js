@@ -326,7 +326,13 @@ function ArticleForm({ editingArticle, onSaved, onCancel }) {
       <div style={{display: 'grid', gap: '20px'}}>
         <div><label style={darkStyles.label}>标题</label><input style={darkStyles.input} value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
         <div><label style={darkStyles.label}>摘要</label><input style={darkStyles.input} value={form.summary} onChange={e => setForm({...form, summary: e.target.value})} /></div>
-        <div><label style={darkStyles.label}>内容 (HTML)</label><textarea style={darkStyles.textarea} value={form.content} onChange={e => setForm({...form, content: e.target.value})} required /></div>
+        <div>
+          <label style={darkStyles.label}>内容 (HTML)</label>
+          <textarea style={darkStyles.textarea} value={form.content} onChange={e => setForm({...form, content: e.target.value})} required />
+          <p style={{color: '#9CA3AF', fontSize: '12px', marginTop: '8px', lineHeight: '1.6'}}>
+            支持的标签：p、br、strong、em、ul、ol、li、blockquote、h2-h4、a、img、code、pre（a 仅允许 href/title/target/rel，img 仅允许 src/alt/title）。
+          </p>
+        </div>
       </div>
       <div style={{display: 'flex', marginTop: '20px'}}>
         <button type="submit" style={darkStyles.primaryBtn}>{isEdit ? "保存修改" : "发布文章"}</button>

@@ -1,12 +1,17 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 import { getArticles, saveArticle } from "../../../lib/db"; // ⬅️ 引入云数据库方法
+import { sanitizeArticleContent } from "../../../lib/sanitize";
 
 async function articlesHandler(req, res) {
   // 1. 获取文章列表 (公开)
   if (req.method === "GET") {
     try {
       const articles = await getArticles(); // 从 KV 读取
-      return res.status(200).json(articles);
+      const sanitizedArticles = articles.map((article) => ({
+        ...article,
+        content: sanitizeArticleContent(article.content || "")
+      }));
+      return res.status(200).json(sanitizedArticles);
     } catch (error) {
       console.error(error);
       return res.status(500).json({ message: "读取数据失败" });
@@ -28,11 +33,12 @@ async function articlesHandler(req, res) {
       }
 
       // 构建新文章对象
+      const sanitizedContent = sanitizeArticleContent(content);
       const newArticle = {
         id: Date.now().toString(),
         title,
         summary,
-        content,
+        content: sanitizedContent,
         tags: Array.isArray(tags) ? tags : [],
         createdAt: new Date().toISOString(),
         author: user.username || "Admin" // 记录作者

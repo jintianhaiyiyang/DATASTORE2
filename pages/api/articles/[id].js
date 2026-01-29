@@ -1,6 +1,7 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 // 引入云数据库操作方法 (获取列表、删除文章)
 import { getArticles, deleteArticle } from "../../../lib/db";
+import { sanitizeArticleContent } from "../../../lib/sanitize";
 
 async function articleDetailRoute(req, res) {
   const { id } = req.query;
@@ -19,7 +20,10 @@ async function articleDetailRoute(req, res) {
         return res.status(404).json({ message: "文章不存在或已删除" });
       }
 
-      return res.json(article);
+      return res.json({
+        ...article,
+        content: sanitizeArticleContent(article.content || "")
+      });
     } catch (error) {
       console.error("获取文章详情失败:", error);
       return res.status(500).json({ message: "服务器内部错误" });

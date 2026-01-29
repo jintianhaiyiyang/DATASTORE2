@@ -19,6 +19,7 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-markdown": "^10.1.0",
+    "sanitize-html": "^2.12.1",
     "stripe": "^20.0.0",
     "wechatpay-node-v3": "^2.2.1"
   }

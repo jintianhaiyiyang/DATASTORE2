@@ -130,6 +130,8 @@ export default function ArticleDetail() {
     );
   }
 
+  const safeContent = article?.content || "";
+
   return (
     <Layout title={article.title}>
       <Head>
@@ -163,7 +165,7 @@ export default function ArticleDetail() {
             {/* 正文内容 (渲染 HTML) */}
             <div 
               style={styles.richContent}
-              dangerouslySetInnerHTML={{ __html: article.content }} 
+              dangerouslySetInnerHTML={{ __html: safeContent }} 
             />
           </article>
         </div>
