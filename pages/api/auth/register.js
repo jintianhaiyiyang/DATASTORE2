@@ -1,5 +1,6 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
-import { getUsers, saveUser } from "../../../lib/db"; // ⬅️ 必须改用这个
+import { saveUser } from "../../../lib/db"; // ⬅️ 必须改用这个
+import bcrypt from "bcrypt";
 
 async function registerHandler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -13,10 +14,11 @@ async function registerHandler(req, res) {
   }
 
   try {
+    const passwordHash = await bcrypt.hash(password, 12);
     // 2. 核心改动：调用云数据库
     const newUser = {
       email,
-      password, // 建议后期加密
+      passwordHash,
       username: email.split("@")[0],
       purchasedIds: [],
       createdAt: new Date().toISOString(),
