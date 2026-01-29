@@ -230,3 +230,39 @@
   .grid { grid-template-columns: 1fr; }
   .searchBarSticky { top: 63px; }
 }
+
+
+.aboutSection {
+  max-width: 1200px;
+  margin: 0 auto 80px;
+  padding: 0 20px;
+}
+
+.aboutCard {
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.9), rgba(17, 24, 39, 0.9));
+  border: 1px solid #374151;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.5);
+}
+
+.aboutTitle {
+  font-size: 24px;
+  margin: 0 0 16px;
+  color: #F9FAFB;
+  letter-spacing: 0.5px;
+}
+
+.aboutContent {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #D1D5DB;
+}
+
+.aboutContent p {
+  margin: 0 0 12px;
+}
+
+.aboutContent a {
+  color: #60A5FA;
+}

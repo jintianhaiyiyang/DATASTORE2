@@ -98,6 +98,26 @@ export default function Layout({ title, children }) {
           {/* 右侧菜单 */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={navLinkStyle('/')}>首页</Link>
+
+            {siteSettings.aboutContent && (
+              <Link
+                href="/#about"
+                style={{
+                  marginLeft: '16px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  padding: '6px 10px',
+                  borderRadius: '999px',
+                  border: '1px solid #374151',
+                  color: '#D1D5DB',
+                  textDecoration: 'none',
+                  background: 'rgba(17, 24, 39, 0.6)'
+                }}
+              >
+                About Us
+              </Link>
+            )}
+
             
             {/* 只有管理员显示后台入口 */}
             {user && user.isAdmin && (

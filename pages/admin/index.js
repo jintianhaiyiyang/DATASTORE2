@@ -182,7 +182,7 @@ export default function AdminPage() {
 // 站点设置
 // =======================
 function SiteSettingsSection({ siteSettings, setSiteSettings }) {
-  const [form, setForm] = useState({ siteTitle: "", logoUrl: "", footerText: "" });
+  const [form, setForm] = useState({ siteTitle: "", logoUrl: "", footerText: "", aboutContent: "" });
   const [logoPreview, setLogoPreview] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -192,6 +192,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
       siteTitle: siteSettings.siteTitle || "",
       logoUrl: siteSettings.logoUrl || "",
       footerText: siteSettings.footerText || "",
+      aboutContent: siteSettings.aboutContent || "",
     });
     setLogoPreview(siteSettings.logoUrl || "");
   }, [siteSettings]);
@@ -227,6 +228,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
           siteTitle: form.siteTitle,
           logoUrl: form.logoUrl,
           footerText: form.footerText,
+          aboutContent: form.aboutContent,
         }),
       });
       const data = await res.json();
@@ -280,6 +282,16 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
             value={form.footerText}
             onChange={(e) => setForm({ ...form, footerText: e.target.value })}
             placeholder="例如：© 2026 数据小商店 DataStore Inc. | 赋能商业决策"
+          />
+        </div>
+
+        <div style={{gridColumn: 'span 2'}}>
+          <label style={darkStyles.label}>About Us (HTML)</label>
+          <textarea
+            style={darkStyles.textarea}
+            value={form.aboutContent}
+            onChange={(e) => setForm({ ...form, aboutContent: e.target.value })}
+            placeholder="Share who you are, your mission, and what you offer."
           />
         </div>
       </div>

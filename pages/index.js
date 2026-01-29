@@ -185,6 +185,19 @@ export default function HomePage() {
           )}
 
         </main>
+
+        {siteSettings.aboutContent && (
+          <section id="about" className={styles.aboutSection}>
+            <div className={styles.aboutCard}>
+              <h2 className={styles.aboutTitle}>About Us</h2>
+              <div
+                className={styles.aboutContent}
+                dangerouslySetInnerHTML={{ __html: siteSettings.aboutContent }}
+              />
+            </div>
+          </section>
+        )}
+
       </div>
     </Layout>
   );

@@ -19,11 +19,12 @@ async function siteHandler(req, res) {
       return res.status(403).json({ message: "无权操作" });
     }
 
-    const { siteTitle, logoUrl, footerText } = req.body || {};
+    const { siteTitle, logoUrl, footerText, aboutContent } = req.body || {};
     const payload = {
       siteTitle: typeof siteTitle === "string" ? siteTitle.trim() : "",
       logoUrl: typeof logoUrl === "string" ? logoUrl.trim() : "",
       footerText: typeof footerText === "string" ? footerText.trim() : "",
+      aboutContent: typeof aboutContent === "string" ? aboutContent.trim() : "",
     };
 
     if (!payload.siteTitle) {
@@ -31,15 +32,19 @@ async function siteHandler(req, res) {
     }
 
     if (payload.siteTitle.length > 60) {
-      return res.status(400).json({ message: "标题过长" });
+      return res.status(400).json({ message: "Title is too long" });
     }
 
     if (payload.footerText.length > 200) {
-      return res.status(400).json({ message: "底部小字过长" });
+      return res.status(400).json({ message: "Footer text is too long" });
+    }
+
+    if (payload.aboutContent.length > 5000) {
+      return res.status(400).json({ message: "About us is too long" });
     }
 
     if (payload.logoUrl.length > 400000) {
-      return res.status(400).json({ message: "Logo 数据过大" });
+      return res.status(400).json({ message: "Logo data is too large" });
     }
 
     try {
