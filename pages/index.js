@@ -4,6 +4,7 @@ import Link from "next/link";
 import Layout from "../components/Layout";
 import Fuse from "fuse.js";
 import styles from "../styles/Home.module.css"; // 引入刚才的黑金样式
+import { useSiteSettings } from "../lib/useSiteSettings";
 
 // Hero 区域的四色图表 Logo
 const HeroLogo = () => (
@@ -16,6 +17,7 @@ const HeroLogo = () => (
 );
 
 export default function HomePage() {
+  const siteSettings = useSiteSettings();
   const [articles, setArticles] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [query, setQuery] = useState("");
@@ -67,8 +69,16 @@ export default function HomePage() {
         
         {/* 顶部 Hero */}
         <section className={styles.heroSection}>
-          <HeroLogo />
-          <h1 className={styles.heroTitle}>DataStore</h1>
+          {siteSettings.logoUrl ? (
+            <img
+              src={siteSettings.logoUrl}
+              alt="logo"
+              style={{ width: '96px', height: '96px', objectFit: 'contain', marginBottom: '20px' }}
+            />
+          ) : (
+            <HeroLogo />
+          )}
+          <h1 className={styles.heroTitle}>{siteSettings.siteTitle || "DataStore"}</h1>
           <p className={styles.heroDesc}>
             连接高价值数据资产与深度商业洞察<br/>
             一站式数字资源交易平台

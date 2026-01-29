@@ -1,5 +1,6 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
-import { getUsers } from "../../../lib/db"; 
+import { getUsers, updateUserByEmail } from "../../../lib/db"; 
+import bcrypt from "bcrypt";
 
 async function loginRoute(req, res) {
   const { username, password } = req.body;
@@ -29,12 +30,25 @@ async function loginRoute(req, res) {
     const users = await getUsers(); // 从 Vercel KV 获取
     
     // 支持邮箱或用户名登录
-    const user = users.find(u => 
-      (u.email === username || u.username === username) && u.password === password
-    );
+    const user = users.find(u => u.email === username || u.username === username);
 
     if (!user) {
       return res.status(403).json({ message: "账号或密码错误" });
+    }
+
+    if (user.passwordHash) {
+      const isValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isValid) {
+        return res.status(403).json({ message: "账号或密码错误" });
+      }
+    } else if (user.password) {
+      if (user.password !== password) {
+        return res.status(403).json({ message: "账号或密码错误" });
+      }
+      const passwordHash = await bcrypt.hash(password, 12);
+      await updateUserByEmail(user.email, { passwordHash });
+    } else {
+      return res.status(403).json({ message: "账号需要重置密码，请先找回或重置。" });
     }
 
     // 颁发普通用户 Session

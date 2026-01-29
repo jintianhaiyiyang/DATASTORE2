@@ -1,22 +1,44 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
-import { getUsers, saveUser } from "../../../lib/db"; // ⬅️ 必须改用这个
+import { saveUser } from "../../../lib/db"; // ⬅️ 必须改用这个
+import bcrypt from "bcrypt";
 
 async function registerHandler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const { email, otp, password } = req.body;
+  const rawEmail = req.body?.email;
+  const email = String(rawEmail || "").trim().toLowerCase();
+  const otp = String(req.body?.otp || "").trim();
+  const password = String(req.body?.password || "");
 
   // 1. 验证码校验逻辑 (保持不变)
   const sessionOtp = req.session.otp;
-  if (!sessionOtp || sessionOtp.email !== email || sessionOtp.code !== otp) {
+  const now = Date.now();
+  if (!sessionOtp || sessionOtp.email !== email || sessionOtp.expires < now) {
     return res.status(400).json({ message: "验证码错误或已过期" });
   }
 
+  if (sessionOtp.attempts >= 5) {
+    req.session.otp = null;
+    await req.session.save();
+    return res.status(429).json({ message: "尝试次数过多，请重新获取验证码" });
+  }
+
+  if (sessionOtp.code !== otp) {
+    req.session.otp = { ...sessionOtp, attempts: (sessionOtp.attempts || 0) + 1 };
+    await req.session.save();
+    return res.status(400).json({ message: "验证码错误或已过期" });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: "密码至少 8 位" });
+  }
+
   try {
+    const passwordHash = await bcrypt.hash(password, 12);
     // 2. 核心改动：调用云数据库
     const newUser = {
       email,
-      password, // 建议后期加密
+      passwordHash,
       username: email.split("@")[0],
       purchasedIds: [],
       createdAt: new Date().toISOString(),
@@ -31,6 +53,7 @@ async function registerHandler(req, res) {
       email: newUser.email,
       isLoggedIn: true,
     };
+    req.session.otp = null;
     await req.session.save();
 
     return res.status(200).json({ success: true });

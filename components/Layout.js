@@ -2,6 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { useSiteSettings } from "../lib/useSiteSettings";
 
 // 四色 Logo 图标
 const LogoIcon = () => (
@@ -16,6 +17,10 @@ const LogoIcon = () => (
 export default function Layout({ title, children }) {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const siteSettings = useSiteSettings();
+  const logoUrl = siteSettings.logoUrl;
+  const siteTitle = siteSettings.siteTitle || "DATA STORE";
+  const footerText = siteSettings.footerText || "© 2026 数据小商店 DataStore Inc. | 赋能商业决策";
 
   // 检查登录状态
   useEffect(() => {
@@ -71,7 +76,7 @@ export default function Layout({ title, children }) {
     // 外层容器：确保最小高度且背景全黑
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#111827' }}>
       <Head>
-        <title>{title || "数据小商店"}</title>
+        <title>{title || siteTitle || "数据小商店"}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
 
@@ -80,9 +85,13 @@ export default function Layout({ title, children }) {
         <div style={containerStyle}>
           {/* Logo 区域 */}
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-            <LogoIcon />
+            {logoUrl ? (
+              <img src={logoUrl} alt="logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+            ) : (
+              <LogoIcon />
+            )}
             <span style={{ fontSize: '20px', fontWeight: '800', color: '#F9FAFB', letterSpacing: '-0.5px' }}>
-              DATA STORE
+              {siteTitle}
             </span>
           </Link>
 
@@ -122,7 +131,7 @@ export default function Layout({ title, children }) {
         marginTop: 'auto',
         backgroundColor: '#111827' // 🟢 修复：深色背景
       }}>
-        © 2026 数据小商店 DataStore Inc. | 赋能商业决策
+        {footerText}
       </footer>
     </div>
   );

@@ -38,6 +38,7 @@ export default function AdminPage() {
 
   const [articles, setArticles] = useState([]);
   const [datasets, setDatasets] = useState([]);
+  const [siteSettings, setSiteSettings] = useState(null);
   
   // 编辑状态
   const [editingArticle, setEditingArticle] = useState(null);
@@ -46,14 +47,17 @@ export default function AdminPage() {
   // 获取数据
   async function fetchAllData() {
     try {
-      const [artRes, datRes] = await Promise.all([
+      const [artRes, datRes, siteRes] = await Promise.all([
         fetch("/api/articles"),
-        fetch("/api/datasets")
+        fetch("/api/datasets"),
+        fetch("/api/site")
       ]);
       const artData = await artRes.json();
       const datData = await datRes.json();
+      const siteData = await siteRes.json();
       if (Array.isArray(artData)) setArticles(artData);
       if (Array.isArray(datData)) setDatasets(datData);
+      if (siteData && typeof siteData === "object") setSiteSettings(siteData);
     } catch (e) { console.error("fetch error", e); }
   }
 
@@ -139,6 +143,7 @@ export default function AdminPage() {
             <div style={darkStyles.tabs}>
               <button style={darkStyles.tabBtn(tab === "dataset")} onClick={() => setTab("dataset")}>数据集管理</button>
               <button style={darkStyles.tabBtn(tab === "article")} onClick={() => setTab("article")}>文章管理</button>
+              <button style={darkStyles.tabBtn(tab === "site")} onClick={() => setTab("site")}>站点设置</button>
             </div>
 
             {/* 内容区 */}
@@ -149,18 +154,156 @@ export default function AdminPage() {
                 setEditingDataset={setEditingDataset}
                 refresh={fetchAllData}
               />
-            ) : (
+            ) : tab === "article" ? (
               <ArticleAdminSection
                 articles={articles}
                 editingArticle={editingArticle}
                 setEditingArticle={setEditingArticle}
                 refresh={fetchAllData}
               />
+            ) : (
+              <SiteSettingsSection
+                siteSettings={siteSettings}
+                setSiteSettings={setSiteSettings}
+              />
             )}
           </div>
         </div>
       </div>
     </Layout>
+  );
+}
+
+// =======================
+// 站点设置
+// =======================
+function SiteSettingsSection({ siteSettings, setSiteSettings }) {
+  const [form, setForm] = useState({ siteTitle: "", logoUrl: "", footerText: "" });
+  const [logoPreview, setLogoPreview] = useState("");
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!siteSettings) return;
+    setForm({
+      siteTitle: siteSettings.siteTitle || "",
+      logoUrl: siteSettings.logoUrl || "",
+      footerText: siteSettings.footerText || "",
+    });
+    setLogoPreview(siteSettings.logoUrl || "");
+  }, [siteSettings]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMsg("仅支持图片格式");
+      return;
+    }
+    if (file.size > 200 * 1024) {
+      setMsg("图片过大，建议小于 200KB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setForm((prev) => ({ ...prev, logoUrl: dataUrl }));
+      setLogoPreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setMsg("保存中...");
+    try {
+      const res = await fetch("/api/site", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteTitle: form.siteTitle,
+          logoUrl: form.logoUrl,
+          footerText: form.footerText,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSiteSettings(data);
+        setMsg("success");
+        setTimeout(() => setMsg(""), 1000);
+      } else {
+        setMsg(data.message || "保存失败");
+      }
+    } catch (err) {
+      setMsg("网络错误");
+    }
+  };
+
+  return (
+    <form onSubmit={handleSave}>
+      <h2 style={{fontSize: '18px', color: 'white', marginBottom: '16px'}}>站点外观设置</h2>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
+        <div>
+          <label style={darkStyles.label}>标题</label>
+          <input
+            style={darkStyles.input}
+            value={form.siteTitle}
+            onChange={(e) => setForm({ ...form, siteTitle: e.target.value })}
+            placeholder="例如：DATA STORE"
+            required
+          />
+        </div>
+        <div>
+          <label style={darkStyles.label}>Logo 图片链接 (可选)</label>
+          <input
+            style={darkStyles.input}
+            value={form.logoUrl}
+            onChange={(e) => {
+              setForm({ ...form, logoUrl: e.target.value });
+              setLogoPreview(e.target.value);
+            }}
+            placeholder="https://..."
+          />
+        </div>
+        <div style={{gridColumn: 'span 2'}}>
+          <label style={darkStyles.label}>上传 Logo (建议 200KB 以内)</label>
+          <input style={darkStyles.input} type="file" accept="image/*" onChange={handleFileChange} />
+        </div>
+        <div style={{gridColumn: 'span 2'}}>
+          <label style={darkStyles.label}>底部小字</label>
+          <input
+            style={darkStyles.input}
+            value={form.footerText}
+            onChange={(e) => setForm({ ...form, footerText: e.target.value })}
+            placeholder="例如：© 2026 数据小商店 DataStore Inc. | 赋能商业决策"
+          />
+        </div>
+      </div>
+
+      <div style={{marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px'}}>
+        <button type="submit" style={darkStyles.primaryBtn}>保存设置</button>
+        <button
+          type="button"
+          onClick={() => {
+            setForm({ ...form, logoUrl: "" });
+            setLogoPreview("");
+          }}
+          style={darkStyles.secondaryBtn}
+        >
+          清除 Logo
+        </button>
+      </div>
+
+      {logoPreview && (
+        <div style={{marginTop: '20px'}}>
+          <label style={darkStyles.label}>预览</label>
+          <div style={{background: '#111827', padding: '16px', borderRadius: '8px', border: '1px solid #374151'}}>
+            <img src={logoPreview} alt="logo preview" style={{width: '96px', height: '96px', objectFit: 'contain'}} />
+          </div>
+        </div>
+      )}
+
+      {msg && <p style={{color: msg==='success'?'#10B981':'#EF4444', marginTop: '10px'}}>{msg === 'success' ? '操作成功' : msg}</p>}
+    </form>
   );
 }
 

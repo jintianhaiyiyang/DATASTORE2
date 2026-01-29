@@ -1,5 +1,7 @@
 import nodemailer from "nodemailer";
 import { withIronSessionApiRoute } from "../../../lib/session";
+import { kv } from "@vercel/kv";
+import crypto from "crypto";
 
 // 允许注册的域名白名单
 const ALLOWED_DOMAINS = [
@@ -10,8 +12,10 @@ const ALLOWED_DOMAINS = [
 async function sendOtpHandler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const { email } = req.body;
-  if (!email || !email.includes("@")) {
+  const rawEmail = req.body?.email;
+  const email = String(rawEmail || "").trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
     return res.status(400).json({ message: "请输入有效的邮箱地址" });
   }
 
@@ -21,27 +25,50 @@ async function sendOtpHandler(req, res) {
   }
 
   // ==========================================
-  // 1. 核心改进：增加发送间隔校验
+  // 1. 发送频率校验（IP + Email + Session）
   // ==========================================
   const now = Date.now();
-  const lastSent = req.session.lastSent || 0;
-  const cooldown = 60 * 1000; // 设置为 60 秒间隔
+  const cooldownMs = 60 * 1000; // 60 秒
+  const ip = (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim()
+    || req.socket?.remoteAddress
+    || "unknown";
 
-  if (now - lastSent < cooldown) {
-    const remaining = Math.ceil((cooldown - (now - lastSent)) / 1000);
-    return res.status(429).json({ 
-      message: `请求太频繁，请在 ${remaining} 秒后再试` 
+  const checkAndSetCooldown = async (key) => {
+    const last = await kv.get(key);
+    if (typeof last === "number" && now - last < cooldownMs) {
+      const remaining = Math.ceil((cooldownMs - (now - last)) / 1000);
+      return remaining;
+    }
+    await kv.set(key, now, { ex: Math.ceil(cooldownMs / 1000) });
+    return 0;
+  };
+
+  const [emailRemaining, ipRemaining] = await Promise.all([
+    checkAndSetCooldown(`otp:email:${email}`),
+    checkAndSetCooldown(`otp:ip:${ip}`),
+  ]);
+
+  const sessionLastSent = req.session.lastSent || 0;
+  const sessionRemaining = now - sessionLastSent < cooldownMs
+    ? Math.ceil((cooldownMs - (now - sessionLastSent)) / 1000)
+    : 0;
+
+  const remaining = Math.max(emailRemaining, ipRemaining, sessionRemaining);
+  if (remaining > 0) {
+    return res.status(429).json({
+      message: `请求太频繁，请在 ${remaining} 秒后再试`
     });
   }
 
-  // 2. 生成 6 位随机验证码
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // 2. 生成 6 位随机验证码（使用加密随机）
+  const otp = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
   
   // 3. 存储验证码和发送时间戳到 Session
-  req.session.otp = { 
-    email, 
-    code: otp, 
-    expires: now + 5 * 60 * 1000 
+  req.session.otp = {
+    email,
+    code: otp,
+    expires: now + 5 * 60 * 1000,
+    attempts: 0
   };
   req.session.lastSent = now; // 记录本次发送时间
   await req.session.save();
@@ -50,14 +77,14 @@ async function sendOtpHandler(req, res) {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT || "465"), 
-    secure: process.env.EMAIL_PORT === "465", 
+    secure: process.env.EMAIL_PORT === "465",
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-    // 解决之前遇到的 self-signed certificate 报错
+    // 默认启用证书校验，除非明确配置关闭
     tls: {
-      rejectUnauthorized: false 
+      rejectUnauthorized: process.env.EMAIL_TLS_REJECT_UNAUTHORIZED !== "false"
     }
   });
 
@@ -84,7 +111,7 @@ async function sendOtpHandler(req, res) {
     // 如果发送失败，建议清除时间戳限制，允许用户重试
     req.session.lastSent = 0;
     await req.session.save();
-    return res.status(500).json({ message: "邮件发送失败", error: error.message });
+    return res.status(500).json({ message: "邮件发送失败" });
   }
 }
 
