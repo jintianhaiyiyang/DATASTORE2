@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
+import { updateSiteSettingsCache } from "../../lib/useSiteSettings";
 // 我们直接在组件内写样式，覆盖掉 styles/Admin.module.css 的亮色样式
 const darkStyles = {
   container: { padding: '20px', maxWidth: '1200px', margin: '0 auto', color: '#E5E7EB' },
@@ -57,7 +58,10 @@ export default function AdminPage() {
       const siteData = await siteRes.json();
       if (Array.isArray(artData)) setArticles(artData);
       if (Array.isArray(datData)) setDatasets(datData);
-      if (siteData && typeof siteData === "object") setSiteSettings(siteData);
+      if (siteData && typeof siteData === "object") {
+        setSiteSettings(siteData);
+        updateSiteSettingsCache(siteData);
+      }
     } catch (e) { console.error("fetch error", e); }
   }
 
@@ -228,6 +232,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
       const data = await res.json();
       if (res.ok) {
         setSiteSettings(data);
+        updateSiteSettingsCache(data);
         setMsg("success");
         setTimeout(() => setMsg(""), 1000);
       } else {

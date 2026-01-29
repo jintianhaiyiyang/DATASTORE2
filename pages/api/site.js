@@ -4,6 +4,7 @@ import { getSiteSettings, saveSiteSettings } from "../../lib/db";
 async function siteHandler(req, res) {
   if (req.method === "GET") {
     try {
+      res.setHeader("Cache-Control", "no-store");
       const settings = await getSiteSettings();
       return res.status(200).json(settings);
     } catch (error) {
