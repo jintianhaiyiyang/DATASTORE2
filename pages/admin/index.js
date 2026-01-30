@@ -262,6 +262,15 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
           />
         </div>
         <div>
+          <label style={darkStyles.label}>?????</label>
+          <input
+            style={darkStyles.input}
+            value={form.pageTitle}
+            onChange={(e) => setForm({ ...form, pageTitle: e.target.value })}
+            placeholder="???DataStore - ?????"
+          />
+        </div>
+        <div>
           <label style={darkStyles.label}>Logo 图片链接 (可选)</label>
           <input
             style={darkStyles.input}
