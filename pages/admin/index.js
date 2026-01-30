@@ -262,12 +262,12 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
           />
         </div>
         <div>
-          <label style={darkStyles.label}>?????</label>
+          <label style={darkStyles.label}>{"\u6807\u7b7e\u9875\u6807\u9898"}</label>
           <input
             style={darkStyles.input}
             value={form.pageTitle}
             onChange={(e) => setForm({ ...form, pageTitle: e.target.value })}
-            placeholder="???DataStore - ?????"
+            placeholder={"\u4f8b\u5982\uff1aDataStore - \u6570\u636e\u5c0f\u5546\u5e97"}
           />
         </div>
         <div>

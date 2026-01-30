@@ -20,7 +20,7 @@ export default function Layout({ title, children }) {
   const siteSettings = useSiteSettings();
   const logoUrl = siteSettings.logoUrl;
   const siteTitle = siteSettings.siteTitle || "DATA STORE";
-  const pageTitle = siteSettings.pageTitle || siteTitle || "?????";
+  const pageTitle = siteSettings.pageTitle || siteTitle || "\u6570\u636e\u5c0f\u5546\u5e97";
   const footerText = siteSettings.footerText || "© 2026 数据小商店 DataStore Inc. | 赋能商业决策";
 
   // 检查登录状态
