@@ -1,0 +1,20 @@
+# 进入项目目录
+cd 你的项目目录
+
+# 初始化 git
+git init
+
+# 添加所有文件
+git add .
+
+# 提交一次
+git commit -m "Initial commit"
+
+# 设定 main 分支为主分支
+git branch -M main
+
+# 关联远端
+git remote add origin https://github.com/你的用户名/仓库名.git
+
+# 推送到 GitHub
+git push -u origin main
