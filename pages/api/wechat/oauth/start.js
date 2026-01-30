@@ -6,7 +6,7 @@ export default withIronSessionApiRoute(async function wechatOauthStart(req, res)
   const appId = process.env.WX_APP_ID;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!appId || !siteUrl) {
-    return res.status(500).json({ message: "??????" });
+    return res.status(500).json({ message: "微信配置缺失" });
   }
 
   const redirectParam = typeof req.query.redirect === "string" ? req.query.redirect : "";

@@ -37,13 +37,13 @@ async function checkoutHandler(req, res) {
     if (tradeType === "jsapi") {
       const openid = req.session.wechatOpenId;
       if (!openid) {
-        return res.status(401).json({ needOauth: true, message: "??????" });
+        return res.status(401).json({ needOauth: true, message: "需要微信授权" });
       }
 
       const result = await wxpay.transactions_jsapi({
         appid: process.env.WX_APP_ID,
         mchid: process.env.WX_MCH_ID,
-        description: `??: ${dataset.name}`,
+        description: `购买: ${dataset.name}`,
         out_trade_no: outTradeNo,
         notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
         amount: { total: amountInCents, currency: 'CNY' },
@@ -52,7 +52,7 @@ async function checkoutHandler(req, res) {
       });
 
       const prepayId = result.prepay_id || (result.data && result.data.prepay_id);
-      if (!prepayId) throw new Error("JSAPI????????");
+      if (!prepayId) throw new Error("JSAPI预支付单创建失败");
 
       const timeStamp = Math.floor(Date.now() / 1000).toString();
       const nonceStr = Math.random().toString(36).substr(2, 15);
@@ -84,7 +84,7 @@ async function checkoutHandler(req, res) {
       const result = await wxpay.transactions_h5({
         appid: process.env.WX_APP_ID,
         mchid: process.env.WX_MCH_ID,
-        description: `???: ${dataset.name}`,
+        description: `购买: ${dataset.name}`,
         out_trade_no: outTradeNo,
         notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
         amount: { total: amountInCents, currency: 'CNY' },
@@ -102,10 +102,10 @@ async function checkoutHandler(req, res) {
     const result = await wxpay.transactions_native({
       appid: process.env.WX_APP_ID,
       mchid: process.env.WX_MCH_ID,
-      description: `???: ${dataset.name}`,
+        description: `购买: ${dataset.name}`,
       out_trade_no: outTradeNo,
       notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
-      amount: { total: amountInCents, currency: 'CNY' }, // ?????total ???????????
+      amount: { total: amountInCents, currency: 'CNY' }, // 这里的 total 现在是动态的了
       attach: JSON.stringify({ datasetId, email: user.email })
     });
 

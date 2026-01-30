@@ -36,7 +36,7 @@ export default function DatasetDetail() {
     return "native";
   };
 
-  const payButtonLabel = paymentClientType === "h5" ? "????" : "??????";
+  const payButtonLabel = paymentClientType === "h5" ? "微信支付" : "微信扫码支付";
 
   // 1. 初始化：获取数据集详情及用户信息
   const fetchData = async () => {
@@ -76,7 +76,7 @@ export default function DatasetDetail() {
     if (typeof window === "undefined") return;
     const doInvoke = () => {
       if (!window.WeixinJSBridge) {
-        alert("???????????");
+        alert("请在微信内打开完成支付");
         return;
       }
       window.WeixinJSBridge.invoke(
@@ -86,9 +86,9 @@ export default function DatasetDetail() {
           if (res.err_msg === "get_brand_wcpay_request:ok") {
             startPolling(outTradeNo);
           } else if (res.err_msg === "get_brand_wcpay_request:cancel") {
-            alert("?????");
+            alert("已取消支付");
           } else {
-            alert("?????????");
+            alert("支付未完成，请重试");
           }
         }
       );
@@ -131,10 +131,10 @@ export default function DatasetDetail() {
         }
       }
 
-      if (!res.ok) throw new Error(data.message || "???????");
+      if (!res.ok) throw new Error(data.message || "初始化支付失败");
 
       if (data.type === "jsapi") {
-        if (!data.payParams) throw new Error("??????");
+        if (!data.payParams) throw new Error("支付参数缺失");
         invokeWeChatPay(data.payParams, data.outTradeNo);
         return;
       }
@@ -144,7 +144,7 @@ export default function DatasetDetail() {
       }
 
       if (data.type === "h5") {
-        if (!data.mwebUrl) throw new Error("??????");
+        if (!data.mwebUrl) throw new Error("支付链接为空");
         if (typeof window !== "undefined") {
           const redirectUrl = window.location.href.split("#")[0];
           const hasRedirect = /[?&]redirect_url=/.test(data.mwebUrl);
@@ -288,7 +288,7 @@ export default function DatasetDetail() {
                       disabled={isPaying} 
                       className={styles.wechatBtn}
                     >
-                      {isPaying ? "??????..." : payButtonLabel}
+                      {isPaying ? "正在创建订单..." : payButtonLabel}
                     </button>
                   </div>
                 )}

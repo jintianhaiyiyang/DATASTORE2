@@ -8,15 +8,15 @@ export default withIronSessionApiRoute(async function wechatOauthCallback(req, r
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
   if (!appId || !appSecret || !siteUrl) {
-    return res.status(500).json({ message: "??????" });
+    return res.status(500).json({ message: "微信配置缺失" });
   }
 
   const code = typeof req.query.code === "string" ? req.query.code : "";
   const state = typeof req.query.state === "string" ? req.query.state : "";
-  if (!code) return res.status(400).json({ message: "?????" });
+  if (!code) return res.status(400).json({ message: "缺少授权码" });
 
   if (!req.session.wxOAuthState || state !== req.session.wxOAuthState) {
-    return res.status(400).json({ message: "state ????" });
+    return res.status(400).json({ message: "state 校验失败" });
   }
 
   try {
@@ -35,6 +35,6 @@ export default withIronSessionApiRoute(async function wechatOauthCallback(req, r
     res.redirect(redirectUrl);
   } catch (err) {
     console.error("wechat oauth error", err);
-    return res.status(500).json({ message: "??????" });
+    return res.status(500).json({ message: "微信授权失败" });
   }
 });
