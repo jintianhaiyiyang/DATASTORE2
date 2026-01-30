@@ -1,0 +1,280 @@
+/* styles/Admin.module.css */
+
+/* 页面容器 */
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+/* 登录框专用容器 */
+.loginContainer {
+  max-width: 400px;
+  margin: 100px auto;
+  padding: 40px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #E5E7EB;
+  text-align: center;
+}
+
+/* 通用卡片样式 */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #E5E7EB;
+  padding: 32px;
+  margin-bottom: 32px;
+}
+
+/* 顶部标题栏 */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  color: #4B5563;
+}
+
+.logoutBtn {
+  color: #DC2626; /* 红色 */
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logoutBtn:hover {
+  background: #FEE2E2;
+}
+
+/* 提示文字 */
+.tip {
+  color: #6B7280;
+  font-size: 14px;
+  margin-bottom: 24px;
+  background: #F3F4F6;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-left: 4px solid #3B82F6; /* 蓝色左边条 */
+}
+
+/* Tab 切换 */
+.tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.tabBtn {
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 15px;
+  font-weight: 500;
+  color: #6B7280;
+  cursor: pointer;
+  margin-bottom: -1px; /* 盖住底边框 */
+}
+
+.tabBtn:hover {
+  color: #111827;
+}
+
+.tabBtn.active {
+  color: #2563EB; /* 商务蓝 */
+  border-bottom-color: #2563EB;
+}
+
+/* 表单样式 */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 双列布局 */
+  gap: 20px;
+}
+
+.fullWidth {
+  grid-column: span 2;
+}
+
+.form label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.input, .textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #F9FAFB;
+}
+
+.input:focus, .textarea:focus {
+  border-color: #2563EB;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+/* 按钮组 */
+.btnGroup {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.primaryBtn {
+  background: #2563EB;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.primaryBtn:hover {
+  background: #1D4ED8;
+}
+
+.secondaryBtn {
+  background: #fff;
+  color: #4B5563;
+  border: 1px solid #D1D5DB;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.secondaryBtn:hover {
+  background: #F3F4F6;
+  border-color: #9CA3AF;
+}
+
+/* 消息提示 */
+.message {
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.errorMsg {
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+/* 表格样式 (替代原来的按钮列表) */
+.tableWrapper {
+  margin-top: 40px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tableHeaderTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #111827;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: #fff;
+}
+
+.table th {
+  background: #F9FAFB;
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: #4B5563;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #E5E7EB;
+  color: #374151;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover {
+  background: #F3F4F6;
+}
+
+.actionBtn {
+  color: #2563EB;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.actionBtn:hover {
+  text-decoration: underline;
+}
+
+/* 标签样式 */
+.tag {
+  display: inline-block;
+  background: #EFF6FF;
+  color: #2563EB;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 4px;
+}

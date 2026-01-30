@@ -1,0 +1,58 @@
+/* ========================================
+   🏢 商务黑金风格 - 全局样式
+   统一深色背景，消除白边
+   ======================================== */
+
+:root {
+  /* --- 核心色板 (深色模式) --- */
+  --bg-page: #111827;      /* 页面背景：深黑 */
+  --bg-surface: #1F2937;   /* 卡片背景：深灰 */
+  
+  /* --- 文字颜色 --- */
+  --text-primary: #F9FAFB;   /* 主标题：亮白 */
+  --text-secondary: #D1D5DB; /* 正文：浅灰 */
+  --text-tertiary: #9CA3AF;  /* 辅助信息：深灰 */
+  
+  /* --- 品牌色 (商务蓝/金) --- */
+  --primary-color: #2563EB;
+  --primary-hover: #1D4ED8;
+  --accent-gold: #F59E0B;
+
+  /* --- 边框与线条 --- */
+  --border-color: #374151; /* 深色边框 */
+  
+  /* --- 阴影 --- */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-page); /* 关键：确保底色是黑的 */
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+/* 布局容器 */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}

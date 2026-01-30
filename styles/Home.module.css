@@ -1,0 +1,268 @@
+/* styles/Home.module.css - 完美适配版 */
+
+.container {
+  /* 移除 min-height，让 Layout 控制高度，防止双滚动条 */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #111827;
+  color: #E5E7EB;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
+}
+
+/* 顶部 Hero 区域 */
+.heroSection {
+  text-align: center;
+  padding: 100px 20px 80px;
+  /* 调整渐变，使其与 Layout 的 Nav 融合 */
+  background: radial-gradient(circle at center, #1F2937 0%, #111827 70%);
+  border-bottom: 1px solid #374151;
+}
+
+.heroTitle {
+  font-size: 4rem;
+  font-weight: 800;
+  margin: 0 0 16px;
+  line-height: 1.1;
+  background: linear-gradient(to right, #60A5FA, #A78BFA);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.05em;
+}
+
+.heroDesc {
+  font-size: 1.25rem;
+  color: #9CA3AF;
+  max-width: 600px;
+  margin: 0 auto 40px;
+  line-height: 1.6;
+}
+
+.statsRow {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-top: 40px;
+  color: #D1D5DB;
+}
+
+.statItem strong {
+  font-size: 24px;
+  color: #F59E0B;
+  display: block;
+}
+
+.divider {
+  width: 1px;
+  height: 40px;
+  background: #374151;
+}
+
+/* 搜索栏吸顶条 */
+.searchBarSticky {
+  position: sticky;
+  /* 因为 Layout 的 Nav 高度是 64px，所以这里 top 设为 63px 以刚好贴合 */
+  top: 63px; 
+  z-index: 90;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(12px);
+  padding: 20px 0;
+  border-bottom: 1px solid #374151;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.searchWrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 50px;
+  border: 1px solid #374151;
+  background: #1F2937;
+  color: white;
+  font-size: 16px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.searchInput:focus {
+  border-color: #60A5FA;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.tabBtn {
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+  background: #374151;
+  color: #9CA3AF;
+}
+
+.tabBtnActive {
+  background: #2563EB;
+  color: white;
+}
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  width: 100%;
+}
+
+.sectionTitle {
+  font-size: 24px;
+  margin-bottom: 24px;
+  margin-top: 40px;
+  padding-left: 12px;
+  border-left: 4px solid;
+  color: white;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.card {
+  background: #1F2937;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #374151;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  border-color: #60A5FA; /* 悬浮时边框变蓝 */
+}
+
+.cardIcon {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.cardBadgeRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: white;
+}
+
+.cardDesc {
+  font-size: 14px;
+  color: #9CA3AF;
+  line-height: 1.6;
+  flex-grow: 1;
+  margin-bottom: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #374151;
+}
+
+.price {
+  font-size: 20px;
+  font-weight: 800;
+  color: #F59E0B;
+}
+
+.action {
+  color: #60A5FA;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 80px;
+  color: #6B7280;
+  font-size: 18px;
+}
+
+@media (max-width: 600px) {
+  .heroTitle { font-size: 2.5rem; }
+  .grid { grid-template-columns: 1fr; }
+  .searchBarSticky { top: 63px; }
+}
+
+
+.aboutSection {
+  max-width: 1200px;
+  margin: 0 auto 80px;
+  padding: 0 20px;
+}
+
+.aboutCard {
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.9), rgba(17, 24, 39, 0.9));
+  border: 1px solid #374151;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.5);
+}
+
+.aboutTitle {
+  font-size: 24px;
+  margin: 0 0 16px;
+  color: #F9FAFB;
+  letter-spacing: 0.5px;
+}
+
+.aboutContent {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #D1D5DB;
+}
+
+.aboutContent p {
+  margin: 0 0 12px;
+}
+
+.aboutContent a {
+  color: #60A5FA;
+}

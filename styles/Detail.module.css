@@ -1,0 +1,175 @@
+/* styles/Detail.module.css —— 黑金商务风格 */
+
+.mainWrapper {
+  background-color: #111827; /* 深色背景 */
+  min-height: 100vh;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.backLink {
+  color: #9CA3AF;
+  text-decoration: none;
+  font-size: 14px;
+  display: inline-block;
+  margin-bottom: 24px;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: #ffffff;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1fr 380px; /* 左侧内容，右侧侧边栏 */
+  gap: 40px;
+}
+
+/* 响应式：手机端变为单列 */
+@media (max-width: 968px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.title {
+  font-size: 36px;
+  font-weight: 800;
+  margin-bottom: 16px;
+  letter-spacing: -0.025em;
+}
+
+.detailCard {
+  background: #1F2937; /* 卡片深色背景 */
+  border: 1px solid #374151;
+  border-radius: 20px;
+  padding: 32px;
+  margin-top: 24px;
+}
+
+.cardHeader {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  padding-left: 12px;
+  border-left: 4px solid #2563EB; /* 蓝色强调条 */
+  color: white;
+}
+
+.richContent {
+  line-height: 1.8;
+  color: #D1D5DB;
+  font-size: 16px;
+}
+
+/* 适配图文内容中的图片 */
+.richContent img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 20px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* 右侧操作区 sticky定位 */
+.rightCol {
+  position: sticky;
+  top: 40px;
+  height: fit-content;
+}
+
+.actionCard {
+  background: #1F2937;
+  border: 1px solid #374151;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.priceSection {
+  margin-bottom: 28px;
+}
+
+.priceLabel {
+  color: #9CA3AF;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.priceValue {
+  font-size: 36px;
+  font-weight: 800;
+  color: #F59E0B; /* 金色价格 */
+}
+
+/* 按钮样式 */
+.wechatBtn, .downloadBtn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+  margin-top: 12px;
+}
+
+.wechatBtn { background: #07C160; color: white; } /* 微信绿 */
+.downloadBtn { background: #2563EB; color: white; } /* 下载蓝 */
+
+.wechatBtn:hover, .downloadBtn:hover { opacity: 0.9; transform: translateY(-2px); }
+.wechatBtn:active { transform: scale(0.98); }
+.wechatBtn:disabled { opacity: 0.5; cursor: not-allowed; background: #4B5563; }
+
+/* 微信弹窗样式 */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85); /* 深色遮罩 */
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modalContent {
+  background: #ffffff; /* 弹窗白色背景 */
+  padding: 40px;
+  border-radius: 32px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  color: #111827;
+}
+
+.modalTitle {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 24px;
+}
+
+.qrWrapper {
+  background: #F3F4F6;
+  padding: 20px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.modalTip {
+  color: #4B5563;
+  font-size: 14px;
+}
