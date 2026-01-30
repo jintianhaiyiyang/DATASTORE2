@@ -62,7 +62,7 @@ export default function HomePage() {
   const totalCount = filteredArticles.length + filteredDatasets.length;
 
   return (
-    <Layout title="DataStore - 数据小商店">
+    <Layout>
       <Head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></Head>
       
       <div className={styles.container}>

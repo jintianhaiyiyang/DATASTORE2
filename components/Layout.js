@@ -20,6 +20,7 @@ export default function Layout({ title, children }) {
   const siteSettings = useSiteSettings();
   const logoUrl = siteSettings.logoUrl;
   const siteTitle = siteSettings.siteTitle || "DATA STORE";
+  const pageTitle = siteSettings.pageTitle || siteTitle || "?????";
   const footerText = siteSettings.footerText || "© 2026 数据小商店 DataStore Inc. | 赋能商业决策";
 
   // 检查登录状态
@@ -76,7 +77,7 @@ export default function Layout({ title, children }) {
     // 外层容器：确保最小高度且背景全黑
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#111827' }}>
       <Head>
-        <title>{title || siteTitle || "数据小商店"}</title>
+        <title>{title ? `${title} - ${pageTitle}` : pageTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
 

@@ -19,9 +19,10 @@ async function siteHandler(req, res) {
       return res.status(403).json({ message: "无权操作" });
     }
 
-    const { siteTitle, logoUrl, footerText, aboutContent } = req.body || {};
+    const { siteTitle, pageTitle, logoUrl, footerText, aboutContent } = req.body || {};
     const payload = {
       siteTitle: typeof siteTitle === "string" ? siteTitle.trim() : "",
+      pageTitle: typeof pageTitle === "string" ? pageTitle.trim() : "",
       logoUrl: typeof logoUrl === "string" ? logoUrl.trim() : "",
       footerText: typeof footerText === "string" ? footerText.trim() : "",
       aboutContent: typeof aboutContent === "string" ? aboutContent.trim() : "",
@@ -33,6 +34,10 @@ async function siteHandler(req, res) {
 
     if (payload.siteTitle.length > 60) {
       return res.status(400).json({ message: "Title is too long" });
+    }
+
+    if (payload.pageTitle && payload.pageTitle.length > 120) {
+      return res.status(400).json({ message: "Page title is too long" });
     }
 
     if (payload.footerText.length > 200) {

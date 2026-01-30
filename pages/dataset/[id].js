@@ -222,7 +222,7 @@ export default function DatasetDetail() {
   if (!dataset) return <Layout title="404">资源不存在</Layout>;
 
   return (
-    <Layout title={`${dataset.name} - DATA STORE`}>
+    <Layout title={dataset.name}>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>

@@ -182,7 +182,7 @@ export default function AdminPage() {
 // 站点设置
 // =======================
 function SiteSettingsSection({ siteSettings, setSiteSettings }) {
-  const [form, setForm] = useState({ siteTitle: "", logoUrl: "", footerText: "", aboutContent: "" });
+  const [form, setForm] = useState({ siteTitle: "", pageTitle: "", logoUrl: "", footerText: "", aboutContent: "" });
   const [logoPreview, setLogoPreview] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -190,6 +190,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
     if (!siteSettings) return;
     setForm({
       siteTitle: siteSettings.siteTitle || "",
+      pageTitle: siteSettings.pageTitle || "",
       logoUrl: siteSettings.logoUrl || "",
       footerText: siteSettings.footerText || "",
       aboutContent: siteSettings.aboutContent || "",
@@ -226,6 +227,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           siteTitle: form.siteTitle,
+          pageTitle: form.pageTitle,
           logoUrl: form.logoUrl,
           footerText: form.footerText,
           aboutContent: form.aboutContent,
