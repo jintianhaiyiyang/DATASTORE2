@@ -7,7 +7,7 @@ async function checkoutHandler(req, res) {
   const user = req.session.user;
   if (!user || !user.isLoggedIn) return res.status(401).json({ message: "请先登录" });
 
-  const { datasetId } = req.body;
+  const { datasetId, clientType } = req.body;
   
   try {
     // 1. 获取数据集并动态计算价格
@@ -32,13 +32,80 @@ async function checkoutHandler(req, res) {
     });
 
     // 2. 请求微信统一下单
+    const tradeType = clientType === "h5" ? "h5" : (clientType === "jsapi" ? "jsapi" : "native");
+
+    if (tradeType === "jsapi") {
+      const openid = req.session.wechatOpenId;
+      if (!openid) {
+        return res.status(401).json({ needOauth: true, message: "??????" });
+      }
+
+      const result = await wxpay.transactions_jsapi({
+        appid: process.env.WX_APP_ID,
+        mchid: process.env.WX_MCH_ID,
+        description: `??: ${dataset.name}`,
+        out_trade_no: outTradeNo,
+        notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
+        amount: { total: amountInCents, currency: 'CNY' },
+        payer: { openid },
+        attach: JSON.stringify({ datasetId, email: user.email })
+      });
+
+      const prepayId = result.prepay_id || (result.data && result.data.prepay_id);
+      if (!prepayId) throw new Error("JSAPI????????");
+
+      const timeStamp = Math.floor(Date.now() / 1000).toString();
+      const nonceStr = Math.random().toString(36).substr(2, 15);
+      const pkg = `prepay_id=${prepayId}`;
+      const paySign = wxpay.sign(`${process.env.WX_APP_ID}\n${timeStamp}\n${nonceStr}\n${pkg}\n`);
+
+      return res.status(200).json({
+        type: "jsapi",
+        outTradeNo,
+        payParams: {
+          appId: process.env.WX_APP_ID,
+          timeStamp,
+          nonceStr,
+          package: pkg,
+          signType: "RSA",
+          paySign,
+        },
+      });
+    }
+
+    if (tradeType === "h5") {
+      const forwarded = req.headers["x-forwarded-for"];
+      const rawIp = Array.isArray(forwarded)
+        ? forwarded[0]
+        : (forwarded || "").split(",")[0].trim();
+      const socketIp = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "";
+      const clientIp = (rawIp || socketIp || "127.0.0.1").replace("::ffff:", "");
+
+      const result = await wxpay.transactions_h5({
+        appid: process.env.WX_APP_ID,
+        mchid: process.env.WX_MCH_ID,
+        description: `???: ${dataset.name}`,
+        out_trade_no: outTradeNo,
+        notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
+        amount: { total: amountInCents, currency: 'CNY' },
+        scene_info: {
+          payer_client_ip: clientIp,
+          h5_info: { type: "Wap" },
+        },
+        attach: JSON.stringify({ datasetId, email: user.email })
+      });
+
+      const mwebUrl = result.mweb_url || (result.data && result.data.mweb_url);
+      return res.status(200).json({ type: "h5", mwebUrl, outTradeNo });
+    }
+
     const result = await wxpay.transactions_native({
       appid: process.env.WX_APP_ID,
       mchid: process.env.WX_MCH_ID,
-      description: `购买: ${dataset.name}`,
+      description: `???: ${dataset.name}`,
       out_trade_no: outTradeNo,
       notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/notify/wechat`,
-      amount: { total: amountInCents, currency: 'CNY' }, // 这里的 total 现在是动态的了
+      amount: { total: amountInCents, currency: 'CNY' }, // ?????total ???????????
       attach: JSON.stringify({ datasetId, email: user.email })
     });
 
