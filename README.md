@@ -3,6 +3,15 @@
 DataStore 是一个基于 Next.js 的数字资产交易平台，支持数据集（Dataset）售卖与文章（Article）内容管理，集成微信支付、Vercel KV 与 Iron Session。项目包含前台内容展示、后台管理、支付闭环与站点外观配置。
 
 > 适用场景：数据/报告/文档类数字商品的在线售卖与内容发布。
+> ## Star History
+
+<a href="https://www.star-history.com/?repos=jintianhaiyiyang%2FDATASTORE2&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jintianhaiyiyang/DATASTORE2&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jintianhaiyiyang/DATASTORE2&type=timeline&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jintianhaiyiyang/DATASTORE2&type=timeline&legend=top-left" />
+ </picture>
+</a>
 
 ---
 
