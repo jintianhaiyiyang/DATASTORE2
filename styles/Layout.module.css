@@ -1,0 +1,182 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--nav-height);
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.navInner {
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  /* Reserve space so title/logo swap never jumps the nav */
+  min-height: 32px;
+}
+
+.brandText {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Avoid layout shift while font/content settles */
+  min-width: 4ch;
+}
+
+.logoImg {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: var(--bg-muted);
+}
+
+.navRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.navLink {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+
+.navLink:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.navLinkActive {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.aboutPill {
+  padding: 7px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.aboutPill:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.userChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loginBtn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white !important;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.loginBtn:hover {
+  background: var(--primary-hover);
+}
+
+.logoutBtn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.logoutBtn:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+}
+
+.footer {
+  margin-top: auto;
+  text-align: center;
+  padding: 28px 20px 36px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+@media (max-width: 640px) {
+  .navInner {
+    padding: 0 16px;
+  }
+
+  .brandText {
+    font-size: 15px;
+    max-width: 120px;
+  }
+
+  .navLink {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .userChip {
+    display: none;
+  }
+}

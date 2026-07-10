@@ -1,0 +1,40 @@
+[
+  {
+    "id": 1,
+    "name": "示例数据集：电商销量明细",
+    "description": "包含 2024 年某店铺电商平台的日度销量明细数据，用于教学演示。",
+    "price": 9.9,
+    "currency": "CNY",
+    "baiduLink": "https://pan.baidu.com/s/示例链接",
+    "tags": [
+      "示例",
+      "电商",
+      "销量"
+    ],
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "name": "x",
+    "description": "hdudhuuu",
+    "price": 2,
+    "currency": "CNY",
+    "baiduLink": "ttt",
+    "tags": [
+      "ttt"
+    ],
+    "createdAt": "2025-11-28T22:31:15.996Z"
+  },
+  {
+    "id": 3,
+    "name": "qwehfiuyikgtwiehvui",
+    "description": "qwek,hgfikqwebgf8q",
+    "price": 0.02,
+    "currency": "CNY",
+    "baiduLink": "erwg34wht5wrg",
+    "tags": [
+      "f3qgqw"
+    ],
+    "createdAt": "2025-12-05T13:02:41.069Z"
+  }
+]

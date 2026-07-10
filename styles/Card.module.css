@@ -1,0 +1,128 @@
+/* Optional shared card component — aligned with light design system */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: var(--shadow-xs);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: #bfdbfe;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.typeBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.typeArticle {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.typeDataset {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.price {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--warning);
+}
+
+.free {
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.summary {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin-bottom: 16px;
+  flex-grow: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.paidBadge {
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 600;
+  background: var(--success-soft);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.downloadBtn {
+  background: var(--primary);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.downloadBtn:hover {
+  background: var(--primary-hover);
+}
+
+.tagList {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
