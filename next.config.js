@@ -3,6 +3,9 @@ const nextConfig = {
   reactStrictMode: true,
   agentRules: false,
   poweredByHeader: false,
+  // Pages Router dependencies are external by default. Bundle this CJS/ESM
+  // pair so Vercel does not try to require htmlparser2's ESM entry at runtime.
+  transpilePackages: ["sanitize-html", "htmlparser2"],
   async headers() {
     const isProduction = process.env.NODE_ENV === "production";
     const scriptPolicy = isProduction

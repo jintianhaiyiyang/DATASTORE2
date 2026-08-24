@@ -15,6 +15,14 @@ describe("content sanitization", () => {
     expect(result).not.toMatch(/script|onclick|javascript:/i);
   });
 
+  it("rejects foreign-content and raw-text XSS payloads", () => {
+    const result = sanitizeRichText(
+      '<svg><textarea><img src=x onerror="alert(1)"></textarea></svg>' +
+        '<math><xmp></xmp><img src=x onerror="alert(2)"></math>'
+    );
+    expect(result).not.toMatch(/svg|math|textarea|xmp|onerror/i);
+  });
+
   it("normalizes and bounds tags", () => {
     expect(cleanTags([" 数据 ", "数据", "<b>商业</b>"])).toEqual(["数据", "商业"]);
   });
