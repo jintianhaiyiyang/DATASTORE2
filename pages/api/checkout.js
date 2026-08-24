@@ -6,6 +6,7 @@ import {
   getClientIp,
   hashKey,
   normalizeEmail,
+  paymentOrderId,
   randomId,
   requireSameOrigin,
 } from "../../lib/security";
@@ -74,7 +75,7 @@ async function checkoutHandler(req, res) {
       return res.status(400).json({ message: "支付金额过低" });
     }
 
-    const outTradeNo = randomId("ORDER_");
+    const outTradeNo = paymentOrderId();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     if (!siteUrl) {
       return res.status(500).json({ message: "站点地址未配置（NEXT_PUBLIC_SITE_URL）" });
@@ -186,7 +187,13 @@ async function checkoutHandler(req, res) {
     }
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
   } catch (err) {
-    console.error("支付初始化错误:", err);
+    console.error("支付初始化错误:", {
+      name: err?.name,
+      message: err?.message,
+      code: err?.code,
+      status: err?.status,
+      providerMessage: err?.providerMessage,
+    });
     return res.status(500).json({ message: "支付初始化失败，请稍后重试" });
   }
 }
