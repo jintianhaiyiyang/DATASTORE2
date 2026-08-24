@@ -1,5 +1,7 @@
 import { withIronSessionApiRoute } from "../../lib/session";
 import { getSiteSettings, saveSiteSettings } from "../../lib/db";
+import { isSafeLogoUrl, sanitizeRichText } from "../../lib/content";
+import { requireSameOrigin } from "../../lib/security";
 
 async function siteHandler(req, res) {
   if (req.method === "GET") {
@@ -14,6 +16,7 @@ async function siteHandler(req, res) {
   }
 
   if (req.method === "PUT") {
+    if (!requireSameOrigin(req, res)) return;
     const user = req.session.user;
     if (!user || !user.isLoggedIn || !user.isAdmin) {
       return res.status(403).json({ message: "无权操作" });
@@ -25,7 +28,8 @@ async function siteHandler(req, res) {
       pageTitle: typeof pageTitle === "string" ? pageTitle.trim() : "",
       logoUrl: typeof logoUrl === "string" ? logoUrl.trim() : "",
       footerText: typeof footerText === "string" ? footerText.trim() : "",
-      aboutContent: typeof aboutContent === "string" ? aboutContent.trim() : "",
+      aboutContent:
+        typeof aboutContent === "string" ? sanitizeRichText(aboutContent) : "",
     };
 
     if (!payload.siteTitle) {
@@ -51,6 +55,9 @@ async function siteHandler(req, res) {
     if (payload.logoUrl.length > 400000) {
       return res.status(400).json({ message: "Logo data is too large" });
     }
+    if (!isSafeLogoUrl(payload.logoUrl)) {
+      return res.status(400).json({ message: "Logo 必须是 HTTPS 地址或常见图片 Data URL" });
+    }
 
     try {
       const updated = await saveSiteSettings(payload);
@@ -62,7 +69,7 @@ async function siteHandler(req, res) {
   }
 
   res.setHeader("Allow", ["GET", "PUT"]);
-  return res.status(405).end("Method Not Allowed");
+  return res.status(405).json({ message: "Method Not Allowed" });
 }
 
 export default withIronSessionApiRoute(siteHandler);

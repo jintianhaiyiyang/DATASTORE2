@@ -1,37 +1,45 @@
 import nodemailer from "nodemailer";
 import { withIronSessionApiRoute } from "../../../lib/session";
-import { kv } from "@vercel/kv";
 import crypto from "crypto";
+import { consumeRateLimit } from "../../../lib/rateLimit";
+import {
+  getClientIp,
+  hashKey,
+  isValidEmail,
+  normalizeEmail,
+  requireSameOrigin,
+} from "../../../lib/security";
 
 // Domains allowed for registration
-const ALLOWED_DOMAINS = [
-  "gmail.com",
-  "qq.com",
-  "outlook.com",
-  "163.com",
-  "hotmail.com",
-  "airlink.us.kg",
-];
+const DEFAULT_ALLOWED_DOMAINS =
+  "gmail.com,qq.com,outlook.com,163.com,hotmail.com";
+
+function allowedDomains() {
+  return (process.env.ALLOWED_EMAIL_DOMAINS || DEFAULT_ALLOWED_DOMAINS)
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 async function sendOtpHandler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: "Method Not Allowed" });
   }
+  if (!requireSameOrigin(req, res)) return;
 
   if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     return res.status(500).json({ message: "邮件服务未配置" });
   }
 
   const rawEmail = req.body?.email;
-  const email = String(rawEmail || "").trim().toLowerCase();
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || !emailRegex.test(email)) {
+  const email = normalizeEmail(rawEmail);
+  if (!isValidEmail(email)) {
     return res.status(400).json({ message: "请输入有效的邮箱地址" });
   }
 
   const domain = email.split("@")[1].toLowerCase();
-  if (!ALLOWED_DOMAINS.includes(domain)) {
+  if (!allowedDomains().includes(domain)) {
     return res.status(400).json({ message: "仅支持主流邮箱及官方域名注册" });
   }
 
@@ -39,41 +47,21 @@ async function sendOtpHandler(req, res) {
   // 1. Rate limit check (IP + Email + Session) — do not write cooldowns yet
   // ==========================================
   const now = Date.now();
-  const cooldownMs = 60 * 1000;
-  const cooldownSec = Math.ceil(cooldownMs / 1000);
-  const ip =
-    (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim() ||
-    req.socket?.remoteAddress ||
-    "unknown";
-
-  const getRemaining = async (key) => {
-    try {
-      const last = await kv.get(key);
-      if (typeof last === "number" && now - last < cooldownMs) {
-        return Math.ceil((cooldownMs - (now - last)) / 1000);
-      }
-    } catch (e) {
-      console.error("OTP cooldown read failed:", e);
-    }
-    return 0;
-  };
-
-  const emailKey = `otp:email:${email}`;
-  const ipKey = `otp:ip:${ip}`;
-
-  const [emailRemaining, ipRemaining] = await Promise.all([
-    getRemaining(emailKey),
-    getRemaining(ipKey),
+  const cooldownSec = 60;
+  const ip = getClientIp(req);
+  const [emailRate, ipRate] = await Promise.all([
+    consumeRateLimit(`rate:otp:email:${hashKey(email)}`, {
+      limit: 1,
+      windowSeconds: cooldownSec,
+    }),
+    consumeRateLimit(`rate:otp:ip:${hashKey(ip)}`, {
+      limit: 5,
+      windowSeconds: cooldownSec,
+    }),
   ]);
-
-  const sessionLastSent = req.session.lastSent || 0;
-  const sessionRemaining =
-    now - sessionLastSent < cooldownMs
-      ? Math.ceil((cooldownMs - (now - sessionLastSent)) / 1000)
-      : 0;
-
-  const remaining = Math.max(emailRemaining, ipRemaining, sessionRemaining);
-  if (remaining > 0) {
+  if (!emailRate.allowed || !ipRate.allowed) {
+    const remaining = Math.max(emailRate.retryAfter, ipRate.retryAfter);
+    res.setHeader("Retry-After", String(remaining));
     return res.status(429).json({
       message: `请求太频繁，请在 ${remaining} 秒后再试`,
     });
@@ -89,7 +77,6 @@ async function sendOtpHandler(req, res) {
     expires: now + 5 * 60 * 1000,
     attempts: 0,
   };
-  req.session.lastSent = now;
   await req.session.save();
 
   // 4. SMTP transporter
@@ -124,21 +111,10 @@ async function sendOtpHandler(req, res) {
       `,
     });
 
-    // Only set distributed cooldowns after a successful send
-    try {
-      await Promise.all([
-        kv.set(emailKey, now, { ex: cooldownSec }),
-        kv.set(ipKey, now, { ex: cooldownSec }),
-      ]);
-    } catch (e) {
-      console.error("OTP cooldown write failed:", e);
-    }
-
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("SMTP 发送报错:", error);
-    // Allow immediate retry after send failure
-    req.session.lastSent = 0;
+    req.session.otp = null;
     await req.session.save();
     return res.status(500).json({ message: "邮件发送失败" });
   }

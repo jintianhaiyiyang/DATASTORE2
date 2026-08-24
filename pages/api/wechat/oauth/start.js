@@ -1,7 +1,17 @@
 import { withIronSessionApiRoute } from "../../../../lib/session";
+import {
+  randomId,
+  resolveSameOriginRedirect,
+} from "../../../../lib/security";
 
 export default withIronSessionApiRoute(async function wechatOauthStart(req, res) {
-  if (req.method !== "GET") return res.status(405).end();
+  if (req.method !== "GET") {
+    res.setHeader("Allow", ["GET"]);
+    return res.status(405).json({ message: "Method Not Allowed" });
+  }
+  if (!req.session.user?.isLoggedIn || !req.session.user.email) {
+    return res.status(401).json({ message: "请先登录" });
+  }
 
   const appId = process.env.WX_APP_ID;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -9,28 +19,19 @@ export default withIronSessionApiRoute(async function wechatOauthStart(req, res)
     return res.status(500).json({ message: "微信配置缺失" });
   }
 
-  const redirectParam = typeof req.query.redirect === "string" ? req.query.redirect : "";
-  const normalizedSite = siteUrl.replace(/\/$/, "");
-  let redirectUrl = normalizedSite;
+  let redirectUrl;
   try {
-    // Prevent open redirect: only same-origin absolute URLs or relative paths
-    if (redirectParam) {
-      if (redirectParam.startsWith(normalizedSite)) {
-        redirectUrl = redirectParam;
-      } else if (redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
-        redirectUrl = `${normalizedSite}${redirectParam}`;
-      }
-    }
-  } catch (e) {
-    // ignore invalid redirect
+    redirectUrl = resolveSameOriginRedirect(req.query.redirect, siteUrl);
+  } catch {
+    return res.status(500).json({ message: "站点地址配置无效" });
   }
 
-  const state = Math.random().toString(36).slice(2, 10);
+  const state = randomId("wx_");
   req.session.wxOAuthState = state;
   req.session.wxOAuthRedirect = redirectUrl;
   await req.session.save();
 
-  const callbackUrl = `${siteUrl}/api/wechat/oauth/callback`;
+  const callbackUrl = new URL("/api/wechat/oauth/callback", siteUrl).toString();
   const authUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appId}&redirect_uri=${encodeURIComponent(
     callbackUrl
   )}&response_type=code&scope=snsapi_base&state=${state}#wechat_redirect`;

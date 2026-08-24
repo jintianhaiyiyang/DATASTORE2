@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
+import Image from "next/image";
+import { useRouter } from "next/router";
 import { updateSiteSettingsCache } from "../../lib/useSiteSettings";
 import styles from "../../styles/Admin.module.css";
 
 export default function AdminPage() {
+  const router = useRouter();
   const [tab, setTab] = useState("dataset");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
@@ -71,7 +74,7 @@ export default function AdminPage() {
         body: JSON.stringify(loginForm),
       });
       const data = await res.json();
-      if (res.ok && data.success) window.location.reload();
+      if (res.ok && data.success) router.reload();
       else setLoginMsg(data.message || "账号或密码错误");
     } catch {
       setLoginMsg("网络请求异常");
@@ -80,7 +83,7 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.reload();
+    await router.push("/");
   };
 
   if (checkingAuth) {
@@ -188,10 +191,15 @@ export default function AdminPage() {
               refresh={fetchAllData}
             />
           ) : (
-            <SiteSettingsSection
-              siteSettings={siteSettings}
-              setSiteSettings={setSiteSettings}
-            />
+            siteSettings ? (
+              <SiteSettingsSection
+                key={siteSettings.updatedAt || siteSettings.siteTitle}
+                siteSettings={siteSettings}
+                setSiteSettings={setSiteSettings}
+              />
+            ) : (
+              <p className={styles.loading}>正在加载站点设置...</p>
+            )
           )}
         </div>
       </div>
@@ -200,27 +208,15 @@ export default function AdminPage() {
 }
 
 function SiteSettingsSection({ siteSettings, setSiteSettings }) {
-  const [form, setForm] = useState({
-    siteTitle: "",
-    pageTitle: "",
-    logoUrl: "",
-    footerText: "",
-    aboutContent: "",
-  });
-  const [logoPreview, setLogoPreview] = useState("");
+  const [form, setForm] = useState(() => ({
+    siteTitle: siteSettings?.siteTitle || "",
+    pageTitle: siteSettings?.pageTitle || "",
+    logoUrl: siteSettings?.logoUrl || "",
+    footerText: siteSettings?.footerText || "",
+    aboutContent: siteSettings?.aboutContent || "",
+  }));
+  const [logoPreview, setLogoPreview] = useState(() => siteSettings?.logoUrl || "");
   const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    if (!siteSettings) return;
-    setForm({
-      siteTitle: siteSettings.siteTitle || "",
-      pageTitle: siteSettings.pageTitle || "",
-      logoUrl: siteSettings.logoUrl || "",
-      footerText: siteSettings.footerText || "",
-      aboutContent: siteSettings.aboutContent || "",
-    });
-    setLogoPreview(siteSettings.logoUrl || "");
-  }, [siteSettings]);
 
   const handleFileChange = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -353,7 +349,14 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
 
       {logoPreview && (
         <div className={styles.previewBox}>
-          <img src={logoPreview} alt="logo preview" className={styles.previewImg} />
+          <Image
+            src={logoPreview}
+            alt="Logo 预览"
+            className={styles.previewImg}
+            width={96}
+            height={96}
+            unoptimized
+          />
         </div>
       )}
 

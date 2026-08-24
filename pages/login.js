@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import styles from "../styles/Auth.module.css";
 
 export default function AuthPage() {
+  const router = useRouter();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [message, setMessage] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   useEffect(() => {
     let timer;
@@ -19,30 +23,41 @@ export default function AuthPage() {
   }, [countdown]);
 
   const sendOtp = async () => {
-    if (!email.includes("@")) return alert("请输入正确邮箱");
+    if (!email.includes("@")) {
+      setMessage("请输入正确邮箱");
+      return;
+    }
 
-    const res = await fetch("/api/auth/send-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-
-    if (res.ok) {
-      alert("验证码已发送！");
-      setCountdown(60);
-    } else {
-      const data = await res.json();
-      alert(data.message);
+    setSendingOtp(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage("验证码已发送，请检查邮箱");
+        setCountdown(60);
+      } else {
+        setMessage(data.message || "验证码发送失败");
+      }
+    } catch {
+      setMessage("网络错误，请稍后重试");
+    } finally {
+      setSendingOtp(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isRegister && password.length < 8) {
-      alert("密码至少 8 位");
+      setMessage("密码至少 8 位");
       return;
     }
     setLoading(true);
+    setMessage("");
 
     const url = isRegister ? "/api/auth/register" : "/api/auth/login";
     const body = isRegister
@@ -57,13 +72,13 @@ export default function AuthPage() {
       });
 
       if (res.ok) {
-        window.location.href = "/";
+        await router.push("/");
         return;
       }
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "操作失败");
+      setMessage(data.message || "操作失败");
     } catch {
-      alert("网络错误，请稍后重试");
+      setMessage("网络错误，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -81,6 +96,11 @@ export default function AuthPage() {
               ? "使用邮箱验证码完成注册"
               : "登录后即可购买与管理资源"}
           </p>
+          {message && (
+            <div className={styles.alert} role="status" aria-live="polite">
+              {message}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.field}>
@@ -110,10 +130,14 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={sendOtp}
-                    disabled={countdown > 0}
+                    disabled={countdown > 0 || sendingOtp}
                     className={styles.otpBtn}
                   >
-                    {countdown > 0 ? `${countdown}s` : "获取验证码"}
+                    {sendingOtp
+                      ? "发送中..."
+                      : countdown > 0
+                        ? `${countdown}s`
+                        : "获取验证码"}
                   </button>
                 </div>
               </div>
@@ -146,7 +170,12 @@ export default function AuthPage() {
             <button
               type="button"
               className={styles.switchBtn}
-              onClick={() => setIsRegister(!isRegister)}
+              onClick={() => {
+                setIsRegister(!isRegister);
+                setMessage("");
+                setOtp("");
+                setPassword("");
+              }}
             >
               {isRegister ? "去登录" : "注册新账号"}
             </button>

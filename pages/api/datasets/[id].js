@@ -3,8 +3,15 @@ import {
   getDatasets,
   updateDataset,
   deleteDataset,
-  getUsers,
+  getPurchasedIds,
 } from "../../../lib/db";
+import {
+  cleanTags,
+  cleanText,
+  isHttpUrl,
+  sanitizeRichText,
+} from "../../../lib/content";
+import { requireSameOrigin } from "../../../lib/security";
 
 function hasPurchased(purchasedIds, datasetId) {
   if (!Array.isArray(purchasedIds)) return false;
@@ -20,15 +27,14 @@ async function handler(req, res) {
 
   if (req.method === "GET") {
     try {
+      res.setHeader("Cache-Control", "private, no-store");
       const datasets = await getDatasets();
       const dataset = datasets.find((d) => String(d.id) === String(id));
       if (!dataset) return res.status(404).json({ message: "资源不存在" });
 
       let purchasedIds = [];
       if (isLoggedIn && user.email) {
-        const allUsers = await getUsers();
-        const currentUser = allUsers.find((u) => u.email === user.email);
-        purchasedIds = currentUser?.purchasedIds || [];
+        purchasedIds = await getPurchasedIds(user.email);
       }
 
       const isPaid = isLoggedIn && hasPurchased(purchasedIds, id);
@@ -59,6 +65,7 @@ async function handler(req, res) {
   }
 
   if (req.method === "PUT") {
+    if (!requireSameOrigin(req, res)) return;
     if (!isAdmin) return res.status(403).json({ message: "无权操作" });
 
     try {
@@ -66,35 +73,43 @@ async function handler(req, res) {
       const patch = {};
 
       if (body.name !== undefined) {
-        if (!String(body.name).trim()) {
+        const safeName = cleanText(body.name, 120);
+        if (!safeName) {
           return res.status(400).json({ message: "名称不能为空" });
         }
-        patch.name = String(body.name).trim();
+        patch.name = safeName;
       }
       if (body.description !== undefined) {
-        patch.description = String(body.description).trim();
+        patch.description = cleanText(body.description, 1000);
       }
       if (body.richContent !== undefined) {
-        patch.richContent = String(body.richContent);
+        if (String(body.richContent).length > 100000) {
+          return res.status(413).json({ message: "详情内容过长" });
+        }
+        patch.richContent = sanitizeRichText(body.richContent);
       }
       if (body.price !== undefined) {
         const parsedPrice = Number(body.price);
-        if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        if (
+          !Number.isFinite(parsedPrice) ||
+          parsedPrice < 0 ||
+          parsedPrice > 1000000 ||
+          Math.round(parsedPrice * 100) / 100 !== parsedPrice
+        ) {
           return res.status(400).json({ message: "价格无效" });
         }
         patch.price = parsedPrice;
       }
-      if (body.currency !== undefined) patch.currency = body.currency || "CNY";
-      if (body.tags !== undefined) {
-        patch.tags = Array.isArray(body.tags)
-          ? body.tags.map(String).filter(Boolean)
-          : [];
+      if (body.currency !== undefined && body.currency !== "CNY") {
+        return res.status(400).json({ message: "当前仅支持 CNY" });
       }
+      if (body.tags !== undefined) patch.tags = cleanTags(body.tags);
       if (body.baiduLink !== undefined) {
-        if (!String(body.baiduLink).trim()) {
-          return res.status(400).json({ message: "下载链接不能为空" });
+        const safeLink = String(body.baiduLink).trim();
+        if (!isHttpUrl(safeLink)) {
+          return res.status(400).json({ message: "下载链接必须是有效的 HTTPS 地址" });
         }
-        patch.baiduLink = String(body.baiduLink).trim();
+        patch.baiduLink = safeLink;
         patch.downloadUrl = patch.baiduLink;
       }
 
@@ -104,23 +119,27 @@ async function handler(req, res) {
       if (updated) return res.json(updated);
       return res.status(404).json({ message: "更新失败，未找到该数据集" });
     } catch (e) {
-      return res.status(500).json({ message: e.message });
+      console.error("更新数据集失败:", e);
+      return res.status(500).json({ message: "更新失败，请稍后重试" });
     }
   }
 
   if (req.method === "DELETE") {
+    if (!requireSameOrigin(req, res)) return;
     if (!isAdmin) return res.status(403).json({ message: "无权操作" });
 
     try {
-      await deleteDataset(id);
+      const deleted = await deleteDataset(id);
+      if (!deleted) return res.status(404).json({ message: "资源不存在或已删除" });
       return res.json({ success: true });
     } catch (e) {
-      return res.status(500).json({ message: e.message });
+      console.error("删除数据集失败:", e);
+      return res.status(500).json({ message: "删除失败，请稍后重试" });
     }
   }
 
   res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
-  return res.status(405).end("Method Not Allowed");
+  return res.status(405).json({ message: "Method Not Allowed" });
 }
 
 export default withIronSessionApiRoute(handler);

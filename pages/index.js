@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Head from "next/head";
 import Link from "next/link";
+import Image from "next/image";
 import Layout from "../components/Layout";
 import Fuse from "fuse.js";
 import styles from "../styles/Home.module.css";
@@ -28,8 +29,7 @@ export default function HomePage() {
   const [datasets, setDatasets] = useState([]);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [articleFuse, setArticleFuse] = useState(null);
-  const [datasetFuse, setDatasetFuse] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,34 +38,36 @@ export default function HomePage() {
           fetch("/api/articles"),
           fetch("/api/datasets"),
         ]);
+        if (!artRes.ok || !dsRes.ok) throw new Error("内容加载失败");
         const artData = await artRes.json();
         const dsData = await dsRes.json();
         setArticles(Array.isArray(artData) ? artData : []);
         setDatasets(Array.isArray(dsData) ? dsData : []);
       } catch (e) {
         console.error(e);
+        setLoadError("暂时无法加载内容，请稍后刷新重试");
       }
     };
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (articles.length > 0) {
-      setArticleFuse(new Fuse(articles, { keys: ["title", "summary"], threshold: 0.35 }));
-    }
-    if (datasets.length > 0) {
-      setDatasetFuse(new Fuse(datasets, { keys: ["name", "description"], threshold: 0.35 }));
-    }
-  }, [articles, datasets]);
+  const articleFuse = useMemo(
+    () => new Fuse(articles, { keys: ["title", "summary"], threshold: 0.35 }),
+    [articles]
+  );
+  const datasetFuse = useMemo(
+    () => new Fuse(datasets, { keys: ["name", "description"], threshold: 0.35 }),
+    [datasets]
+  );
 
   const filteredArticles = useMemo(() => {
     if (!query) return articles;
-    return articleFuse ? articleFuse.search(query).map((r) => r.item) : [];
+    return articleFuse.search(query).map((r) => r.item);
   }, [query, articleFuse, articles]);
 
   const filteredDatasets = useMemo(() => {
     if (!query) return datasets;
-    return datasetFuse ? datasetFuse.search(query).map((r) => r.item) : [];
+    return datasetFuse.search(query).map((r) => r.item);
   }, [query, datasetFuse, datasets]);
 
   const showDatasets = activeTab === "all" || activeTab === "dataset";
@@ -91,10 +93,13 @@ export default function HomePage() {
           <div className={styles.heroInner}>
             <div className={styles.logoWrap}>
               {siteSettings.logoUrl ? (
-                <img
+                <Image
                   src={siteSettings.logoUrl}
                   alt="logo"
                   className={styles.logoImg}
+                  width={40}
+                  height={40}
+                  unoptimized
                 />
               ) : (
                 <HeroLogo />
@@ -156,6 +161,11 @@ export default function HomePage() {
         </section>
 
         <main className={styles.main}>
+          {loadError && (
+            <div className={styles.empty} role="alert">
+              <p>{loadError}</p>
+            </div>
+          )}
           {showDatasets && filteredDatasets.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHead}>

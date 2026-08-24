@@ -5,22 +5,35 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "check": "npm run lint && npm run test && npm run build"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "@vercel/kv": "^3.0.0",
-    "alipay-sdk": "^4.14.0",
-    "bcrypt": "^5.1.1",
-    "fuse.js": "^7.1.0",
+    "bcryptjs": "^3.0.3",
+    "fuse.js": "^7.5.0",
     "iron-session": "^8.0.4",
-    "jsonwebtoken": "^9.0.2",
-    "next": "14.0.0",
-    "nodemailer": "^7.0.12",
+    "next": "16.3.2",
+    "nodemailer": "^9.0.5",
     "qrcode.react": "^4.2.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "react-markdown": "^10.1.0",
-    "stripe": "^20.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sanitize-html": "^2.17.0",
     "wechatpay-node-v3": "^2.2.1"
+  },
+  "devDependencies": {
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.2",
+    "vitest": "^4.0.0"
+  },
+  "overrides": {
+    "form-data": "^4.0.6",
+    "qs": "^6.15.3",
+    "brace-expansion@1.1.12": "1.1.18"
   }
 }

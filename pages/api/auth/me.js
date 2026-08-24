@@ -10,7 +10,8 @@ async function meRoute(req, res) {
 
   if (req.session.user) {
     return res.json({
-      ...req.session.user,
+      username: req.session.user.username || null,
+      email: req.session.user.email || null,
       isLoggedIn: true,
       isAdmin: !!req.session.user.isAdmin,
     });

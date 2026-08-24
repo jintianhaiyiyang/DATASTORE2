@@ -1,5 +1,28 @@
-import { updateUserPurchase } from "../../../lib/db";
+import {
+  getOrder,
+  markOrderPaid,
+  updateUserPurchase,
+} from "../../../lib/db";
 import { createWxPay } from "../../../lib/wxpay";
+import {
+  parsePaymentAttach,
+  validatePaidOrder,
+} from "../../../lib/orderValidation";
+
+export const config = {
+  api: { bodyParser: false },
+};
+
+async function readRawBody(req, maxBytes = 1024 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) throw new Error("请求体过大");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 /**
  * WeChat Pay APIv3 payment notification callback.
@@ -23,27 +46,25 @@ export default async function wechatNotify(req, res) {
       return res.status(400).json({ code: "FAIL", message: "缺少验签头" });
     }
 
-    const body = req.body;
-    let isValid = false;
-    try {
-      isValid = await wxpay.verifySign({
-        timestamp,
-        nonce,
-        body,
-        serial,
-        signature,
-        apiSecret: process.env.WX_API_V3_KEY,
-      });
-    } catch (verifyErr) {
-      console.error("[wechat notify] verifySign error:", verifyErr.message);
-      // Fall through to attempt decrypt if platform certs are not cached yet;
-      // decryption still requires the correct APIv3 key.
-    }
+    const rawBody = await readRawBody(req);
+    const isValid = await wxpay.verifySign({
+      timestamp,
+      nonce,
+      body: rawBody,
+      serial,
+      signature,
+      apiSecret: process.env.WX_API_V3_KEY,
+    });
 
     if (!isValid) {
-      // Some deployments lack platform certificates for verifySign; still try decrypt.
-      // Log and continue carefully — ciphertext cannot be forged without APIv3 key.
-      console.warn("[wechat notify] signature verify failed or skipped; decrypting with APIv3 key");
+      return res.status(401).json({ code: "FAIL", message: "签名校验失败" });
+    }
+
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return res.status(400).json({ code: "FAIL", message: "请求体无效" });
     }
 
     const resource = body?.resource;
@@ -58,21 +79,29 @@ export default async function wechatNotify(req, res) {
     );
 
     if (data && data.trade_state === "SUCCESS") {
-      let attach = {};
-      try {
-        attach = JSON.parse(data.attach || "{}");
-      } catch {
-        attach = {};
-      }
+      const attach = parsePaymentAttach(data.attach);
 
-      if (attach.email && attach.datasetId !== undefined && attach.datasetId !== null) {
-        await updateUserPurchase(attach.email, attach.datasetId);
+      const orderId = data.out_trade_no;
+      const order = orderId ? await getOrder(orderId) : null;
+      if (!validatePaidOrder({
+        order,
+        payment: data,
+        attach,
+        expectedMchId: process.env.WX_MCH_ID,
+        expectedAppId: process.env.WX_APP_ID,
+      })) {
+        console.error("[wechat notify] 订单数据校验失败", orderId || "unknown");
+        return res.status(409).json({ code: "FAIL", message: "订单数据校验失败" });
+      }
+      if (order.status !== "paid") {
+        await updateUserPurchase(order.email, order.datasetId);
+        await markOrderPaid(orderId, data.transaction_id);
       }
     }
 
     return res.status(200).json({ code: "SUCCESS", message: "成功" });
   } catch (error) {
     console.error("[wechat notify] error:", error);
-    return res.status(500).json({ code: "FAIL", message: error.message || "处理失败" });
+    return res.status(500).json({ code: "FAIL", message: "处理失败" });
   }
 }

@@ -1,12 +1,21 @@
 import { withIronSessionApiRoute } from "../../lib/session";
-import { getDatasets } from "../../lib/db";
+import { getDatasets, getPurchasedIds, saveOrder } from "../../lib/db";
 import { createWxPay, unwrapWxResult } from "../../lib/wxpay";
+import { consumeRateLimit } from "../../lib/rateLimit";
+import {
+  getClientIp,
+  hashKey,
+  normalizeEmail,
+  randomId,
+  requireSameOrigin,
+} from "../../lib/security";
 
 async function checkoutHandler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: "Method Not Allowed" });
   }
+  if (!requireSameOrigin(req, res)) return;
 
   const user = req.session.user;
   if (!user || !user.isLoggedIn) {
@@ -23,6 +32,9 @@ async function checkoutHandler(req, res) {
   if (datasetId === undefined || datasetId === null || datasetId === "") {
     return res.status(400).json({ message: "缺少 datasetId" });
   }
+  if (clientType && !["native", "h5", "jsapi"].includes(clientType)) {
+    return res.status(400).json({ message: "支付类型无效" });
+  }
 
   try {
     const datasets = await getDatasets();
@@ -30,6 +42,21 @@ async function checkoutHandler(req, res) {
 
     if (!dataset) {
       return res.status(404).json({ message: "资源不存在或已下架" });
+    }
+
+    const email = normalizeEmail(user.email);
+    const purchasedIds = await getPurchasedIds(email);
+    if (purchasedIds.includes(String(dataset.id))) {
+      return res.status(409).json({ message: "你已购买该资源，请直接下载" });
+    }
+
+    const rate = await consumeRateLimit(
+      `rate:checkout:${hashKey(`${email}:${dataset.id}`)}`,
+      { limit: 5, windowSeconds: 60 }
+    );
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", String(rate.retryAfter));
+      return res.status(429).json({ message: "创建订单过于频繁，请稍后再试" });
     }
 
     const price = Number(dataset.price);
@@ -47,35 +74,59 @@ async function checkoutHandler(req, res) {
       return res.status(400).json({ message: "支付金额过低" });
     }
 
-    const outTradeNo = `ORDER_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const outTradeNo = randomId("ORDER_");
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     if (!siteUrl) {
       return res.status(500).json({ message: "站点地址未配置（NEXT_PUBLIC_SITE_URL）" });
+    }
+    let normalizedSiteUrl;
+    try {
+      normalizedSiteUrl = new URL(siteUrl);
+      if (!["http:", "https:"].includes(normalizedSiteUrl.protocol)) throw new Error();
+      if (process.env.NODE_ENV === "production" && normalizedSiteUrl.protocol !== "https:") {
+        return res.status(500).json({ message: "生产环境站点地址必须使用 HTTPS" });
+      }
+    } catch {
+      return res.status(500).json({ message: "站点地址配置无效" });
     }
 
     const wxpay = createWxPay();
     const tradeType =
       clientType === "h5" ? "h5" : clientType === "jsapi" ? "jsapi" : "native";
+    if (
+      tradeType === "jsapi" &&
+      (!req.session.wechatOpenId ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(req.session.wechatOpenId))
+    ) {
+      return res.status(401).json({ needOauth: true, message: "需要微信授权" });
+    }
+    const clientIp = tradeType === "h5" ? getClientIp(req) : null;
+    if (tradeType === "h5" && clientIp === "unknown") {
+      return res.status(400).json({ message: "无法识别客户端 IP" });
+    }
     const description = `购买: ${dataset.name}`.slice(0, 127);
-    const attach = JSON.stringify({
-      datasetId: String(datasetId),
-      email: user.email,
-    });
+    const attach = JSON.stringify({ orderId: outTradeNo });
     const baseParams = {
       appid: process.env.WX_APP_ID,
       mchid: process.env.WX_MCH_ID,
       description,
       out_trade_no: outTradeNo,
-      notify_url: `${siteUrl.replace(/\/$/, "")}/api/notify/wechat`,
+      notify_url: new URL("/api/notify/wechat", normalizedSiteUrl).toString(),
       amount: { total: amountInCents, currency: "CNY" },
       attach,
     };
 
+    await saveOrder({
+      id: outTradeNo,
+      datasetId: String(dataset.id),
+      email,
+      amount: amountInCents,
+      currency: "CNY",
+      clientType: tradeType,
+    });
+
     if (tradeType === "jsapi") {
       const openid = req.session.wechatOpenId;
-      if (!openid) {
-        return res.status(401).json({ needOauth: true, message: "需要微信授权" });
-      }
 
       const result = await wxpay.transactions_jsapi({
         ...baseParams,
@@ -89,7 +140,7 @@ async function checkoutHandler(req, res) {
       }
 
       const timeStamp = Math.floor(Date.now() / 1000).toString();
-      const nonceStr = Math.random().toString(36).slice(2, 15);
+      const nonceStr = randomId().slice(-24);
       const pkg = `prepay_id=${prepayId}`;
       // JSAPI paySign message format required by WeChat
       const paySign = wxpay.sign(
@@ -111,13 +162,6 @@ async function checkoutHandler(req, res) {
     }
 
     if (tradeType === "h5") {
-      const forwarded = req.headers["x-forwarded-for"];
-      const rawIp = Array.isArray(forwarded)
-        ? forwarded[0]
-        : (forwarded || "").split(",")[0].trim();
-      const socketIp = req.socket?.remoteAddress || "";
-      const clientIp = (rawIp || socketIp || "127.0.0.1").replace("::ffff:", "");
-
       const result = await wxpay.transactions_h5({
         ...baseParams,
         scene_info: {
@@ -143,7 +187,7 @@ async function checkoutHandler(req, res) {
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
   } catch (err) {
     console.error("支付初始化错误:", err);
-    return res.status(500).json({ message: "支付初始化失败: " + err.message });
+    return res.status(500).json({ message: "支付初始化失败，请稍后重试" });
   }
 }
 

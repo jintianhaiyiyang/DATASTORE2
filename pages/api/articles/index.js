@@ -1,5 +1,7 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 import { getArticles, saveArticle } from "../../../lib/db";
+import { cleanTags, cleanText, sanitizeRichText } from "../../../lib/content";
+import { randomId, requireSameOrigin } from "../../../lib/security";
 
 async function articlesHandler(req, res) {
   if (req.method === "GET") {
@@ -13,6 +15,7 @@ async function articlesHandler(req, res) {
   }
 
   if (req.method === "POST") {
+    if (!requireSameOrigin(req, res)) return;
     const user = req.session.user;
     if (!user || !user.isLoggedIn || !user.isAdmin) {
       return res.status(403).json({ message: "无权操作：需要管理员权限" });
@@ -21,16 +24,21 @@ async function articlesHandler(req, res) {
     try {
       const { title, summary, content, tags } = req.body || {};
 
-      if (!title || !content) {
+      const safeTitle = cleanText(title, 120);
+      const safeContent = sanitizeRichText(content);
+      if (!safeTitle || !safeContent) {
         return res.status(400).json({ message: "标题和内容不能为空" });
+      }
+      if (String(content).length > 100000) {
+        return res.status(413).json({ message: "文章内容过长" });
       }
 
       const newArticle = {
-        id: Date.now().toString(),
-        title: String(title).trim(),
-        summary: summary ? String(summary).trim() : "",
-        content: String(content),
-        tags: Array.isArray(tags) ? tags.map(String).filter(Boolean) : [],
+        id: randomId("article_"),
+        title: safeTitle,
+        summary: cleanText(summary, 500),
+        content: safeContent,
+        tags: cleanTags(tags),
         createdAt: new Date().toISOString(),
         author: user.username || "Admin",
       };
@@ -44,7 +52,7 @@ async function articlesHandler(req, res) {
   }
 
   res.setHeader("Allow", ["GET", "POST"]);
-  return res.status(405).end(`Method ${req.method} Not Allowed`);
+  return res.status(405).json({ message: "Method Not Allowed" });
 }
 
 export default withIronSessionApiRoute(articlesHandler);

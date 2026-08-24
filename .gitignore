@@ -17,7 +17,7 @@ dist/
 # --- Environment files ---
 .env
 .env.*
-!.env.example       # 保留示例文件但不上传真实配置
+!.env.example
 
 # --- Secrets / Keys ---
 *.pem

@@ -15,7 +15,7 @@ export default function ArticleDetail() {
   useEffect(() => {
     if (!id) return;
 
-    fetch(`/api/articles/${id}`)
+    fetch(`/api/articles/${encodeURIComponent(id)}`)
       .then((res) => {
         if (res.status === 404) throw new Error("文章不存在或已被删除");
         if (!res.ok) throw new Error("加载失败");

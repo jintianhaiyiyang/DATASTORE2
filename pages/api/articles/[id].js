@@ -1,5 +1,7 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 import { getArticles, updateArticle, deleteArticle } from "../../../lib/db";
+import { cleanTags, cleanText, sanitizeRichText } from "../../../lib/content";
+import { requireSameOrigin } from "../../../lib/security";
 
 async function articleDetailRoute(req, res) {
   const { id } = req.query;
@@ -21,6 +23,7 @@ async function articleDetailRoute(req, res) {
   }
 
   if (req.method === "PUT") {
+    if (!requireSameOrigin(req, res)) return;
     const user = req.session.user;
     if (!user || !user.isLoggedIn || !user.isAdmin) {
       return res.status(403).json({ message: "无权操作：需要管理员权限" });
@@ -31,21 +34,24 @@ async function articleDetailRoute(req, res) {
       const patch = {};
 
       if (title !== undefined) {
-        if (!String(title).trim()) {
+        const safeTitle = cleanText(title, 120);
+        if (!safeTitle) {
           return res.status(400).json({ message: "标题不能为空" });
         }
-        patch.title = String(title).trim();
+        patch.title = safeTitle;
       }
-      if (summary !== undefined) patch.summary = String(summary).trim();
+      if (summary !== undefined) patch.summary = cleanText(summary, 500);
       if (content !== undefined) {
-        if (!String(content).trim()) {
+        if (String(content).length > 100000) {
+          return res.status(413).json({ message: "文章内容过长" });
+        }
+        const safeContent = sanitizeRichText(content);
+        if (!safeContent) {
           return res.status(400).json({ message: "内容不能为空" });
         }
-        patch.content = String(content);
+        patch.content = safeContent;
       }
-      if (tags !== undefined) {
-        patch.tags = Array.isArray(tags) ? tags.map(String).filter(Boolean) : [];
-      }
+      if (tags !== undefined) patch.tags = cleanTags(tags);
       patch.updatedAt = new Date().toISOString();
 
       const updated = await updateArticle(id, patch);
@@ -55,27 +61,29 @@ async function articleDetailRoute(req, res) {
       return res.status(200).json(updated);
     } catch (e) {
       console.error("更新文章失败:", e);
-      return res.status(500).json({ message: "更新失败: " + e.message });
+      return res.status(500).json({ message: "更新失败，请稍后重试" });
     }
   }
 
   if (req.method === "DELETE") {
+    if (!requireSameOrigin(req, res)) return;
     const user = req.session.user;
     if (!user || !user.isLoggedIn || !user.isAdmin) {
       return res.status(403).json({ message: "无权操作：需要管理员权限" });
     }
 
     try {
-      await deleteArticle(id);
+      const deleted = await deleteArticle(id);
+      if (!deleted) return res.status(404).json({ message: "文章不存在或已删除" });
       return res.status(200).json({ success: true, message: "文章已删除" });
     } catch (e) {
       console.error("删除文章失败:", e);
-      return res.status(500).json({ message: "删除失败: " + e.message });
+      return res.status(500).json({ message: "删除失败，请稍后重试" });
     }
   }
 
   res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
-  return res.status(405).end(`Method ${req.method} Not Allowed`);
+  return res.status(405).json({ message: "Method Not Allowed" });
 }
 
 export default withIronSessionApiRoute(articleDetailRoute);

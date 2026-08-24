@@ -1,10 +1,12 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
+import { requireSameOrigin } from "../../../lib/security";
 
 async function logoutRoute(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: "Method Not Allowed" });
   }
+  if (!requireSameOrigin(req, res)) return;
 
   await req.session.destroy();
   return res.status(200).json({ success: true, message: "已安全退出" });

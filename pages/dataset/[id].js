@@ -1,11 +1,33 @@
 import { useRouter } from "next/router";
-import { useEffect, useState, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Head from "next/head";
 import Link from "next/link";
 import Layout from "../../components/Layout";
-import { QRCodeSVG } from "qrcode.react"; 
-// ⬇️ 关键：必须引入样式文件以恢复“黑金”外观
+import { QRCodeSVG } from "qrcode.react";
 import styles from "../../styles/Detail.module.css";
+
+function getPaymentClientType() {
+  if (typeof navigator === "undefined") return "native";
+  const ua = navigator.userAgent || "";
+  const isWeChat = /MicroMessenger/i.test(ua);
+  const isIpad =
+    /iPad/.test(ua) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isMobile = /Android|iPhone|iPod/i.test(ua) || isIpad;
+  if (isWeChat) return "jsapi";
+  if (isMobile) return "h5";
+  return "native";
+}
+
+function subscribeToClientEnvironment() {
+  return () => {};
+}
 
 export default function DatasetDetail() {
   const router = useRouter();
@@ -15,62 +37,95 @@ export default function DatasetDetail() {
   const [dataset, setDataset] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   
   // 支付相关状态
   const [isPaying, setIsPaying] = useState(false);
   const [wxQrCode, setWxQrCode] = useState(""); 
   const [showWxModal, setShowWxModal] = useState(false);
-  const [paymentClientType, setPaymentClientType] = useState("native");
+  const paymentClientType = useSyncExternalStore(
+    subscribeToClientEnvironment,
+    getPaymentClientType,
+    () => "native"
+  );
   
   // 轮询定时器引用
   const pollingTimer = useRef(null);
 
-  const getPaymentClientType = () => {
-    if (typeof navigator === "undefined") return "native";
-    const ua = navigator.userAgent || "";
-    const isWeChat = /MicroMessenger/i.test(ua);
-    const isIpad = /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const isMobile = /Android|iPhone|iPod/i.test(ua) || isIpad;
-    if (isWeChat) return "jsapi";
-    if (isMobile) return "h5";
-    return "native";
-  };
-
   const payButtonLabel = paymentClientType === "h5" ? "微信支付" : "微信扫码支付";
 
-  // 1. 初始化：获取数据集详情及用户信息
-  const fetchData = async () => {
-    if (!id) return;
-    try {
-      const [dsRes, userRes] = await Promise.all([
-        fetch(`/api/datasets/${id}`),
-        fetch("/api/auth/me")
-      ]);
-      
-      if (dsRes.ok) setDataset(await dsRes.json());
-      if (userRes.ok) setUser(await userRes.json());
-    } catch (e) {
-      console.error("加载详情失败:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (router.isReady) {
-      fetchData();
+    if (!router.isReady || !id) return undefined;
+    const controller = new AbortController();
+
+    async function loadData() {
+      try {
+        const [dsRes, userRes] = await Promise.all([
+          fetch(`/api/datasets/${encodeURIComponent(id)}`, {
+            signal: controller.signal,
+          }),
+          fetch("/api/auth/me", { signal: controller.signal }),
+        ]);
+        if (!dsRes.ok) throw new Error(dsRes.status === 404 ? "资源不存在" : "资源加载失败");
+        setDataset(await dsRes.json());
+        if (userRes.ok) setUser(await userRes.json());
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("加载详情失败:", error);
+          setLoadError(error.message || "资源加载失败");
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
-    // 组件卸载时清除定时器，防止内存泄漏
+
+    loadData();
     return () => {
-      if (pollingTimer.current) clearInterval(pollingTimer.current);
+      controller.abort();
+      if (pollingTimer.current) clearTimeout(pollingTimer.current);
     };
   }, [id, router.isReady]);
 
-  useEffect(() => {
-    setPaymentClientType(getPaymentClientType());
-  }, []);
+  const pendingOrderKey = id ? `pendingOrder:${id}` : "";
 
-  // 2. 核心支付逻辑 (只保留微信)
+  const startPolling = useCallback(
+    (outTradeNo) => {
+      if (!outTradeNo) return;
+      if (pollingTimer.current) clearTimeout(pollingTimer.current);
+
+      let attempts = 0;
+      const poll = async () => {
+        attempts += 1;
+        if (attempts > 150) {
+          pollingTimer.current = null;
+          return;
+        }
+        try {
+          const res = await fetch(
+            `/api/check-order?orderId=${encodeURIComponent(outTradeNo)}&t=${Date.now()}`
+          );
+          const data = await res.json().catch(() => ({}));
+          if (data.paid) {
+            pollingTimer.current = null;
+            setShowWxModal(false);
+            if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
+            router.reload();
+            return;
+          }
+          if (res.status === 404 || res.status === 403) {
+            if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
+            pollingTimer.current = null;
+            return;
+          }
+        } catch (error) {
+          console.error("查询订单状态出错:", error);
+        }
+        pollingTimer.current = setTimeout(poll, 2000);
+      };
+      poll();
+    },
+    [pendingOrderKey, router]
+  );
 
   const invokeWeChatPay = (payParams, outTradeNo) => {
     if (typeof window === "undefined") return;
@@ -96,11 +151,8 @@ export default function DatasetDetail() {
 
     if (window.WeixinJSBridge) {
       doInvoke();
-    } else if (document.addEventListener) {
-      document.addEventListener("WeixinJSBridgeReady", doInvoke, false);
-    } else if (document.attachEvent) {
-      document.attachEvent("WeixinJSBridgeReady", doInvoke);
-      document.attachEvent("onWeixinJSBridgeReady", doInvoke);
+    } else {
+      document.addEventListener("WeixinJSBridgeReady", doInvoke, { once: true });
     }
   };
   const handleBuy = async () => {
@@ -126,21 +178,23 @@ export default function DatasetDetail() {
       if (data.needOauth) {
         if (typeof window !== "undefined") {
           const redirectUrl = window.location.href.split("#")[0];
-          window.location.href = `/api/wechat/oauth/start?redirect=${encodeURIComponent(redirectUrl)}`;
+          await router.push(
+            `/api/wechat/oauth/start?redirect=${encodeURIComponent(redirectUrl)}`
+          );
           return;
         }
       }
 
       if (!res.ok) throw new Error(data.message || "初始化支付失败");
 
+      if (data.outTradeNo && pendingOrderKey) {
+        localStorage.setItem(pendingOrderKey, data.outTradeNo);
+      }
+
       if (data.type === "jsapi") {
         if (!data.payParams) throw new Error("支付参数缺失");
         invokeWeChatPay(data.payParams, data.outTradeNo);
         return;
-      }
-
-      if (data.outTradeNo && typeof window !== "undefined") {
-        window.localStorage.setItem("pendingOrderId", data.outTradeNo);
       }
 
       if (data.type === "h5") {
@@ -150,7 +204,7 @@ export default function DatasetDetail() {
           const hasRedirect = /[?&]redirect_url=/.test(data.mwebUrl);
           const separator = data.mwebUrl.includes("?") ? "&" : "?";
           const jumpUrl = hasRedirect ? data.mwebUrl : `${data.mwebUrl}${separator}redirect_url=${encodeURIComponent(redirectUrl)}`;
-          window.location.href = jumpUrl;
+          window.location.assign(jumpUrl);
           return;
         }
       }
@@ -159,7 +213,6 @@ export default function DatasetDetail() {
         setWxQrCode(data.codeUrl);
         setShowWxModal(true);
 
-        // 🟢 拿到订单号，立即开始轮询查单
         startPolling(data.outTradeNo);
       }
     } catch (e) {
@@ -169,59 +222,21 @@ export default function DatasetDetail() {
     }
   };
 
-  // 3. 轮询函数：每 2 秒检查一次订单状态，最多约 5 分钟
-  const startPolling = (outTradeNo) => {
-    if (!outTradeNo) return;
-    if (pollingTimer.current) clearInterval(pollingTimer.current);
-
-    let attempts = 0;
-    const maxAttempts = 150; // 150 * 2s ≈ 5 min
-
-    pollingTimer.current = setInterval(async () => {
-      attempts += 1;
-      if (attempts > maxAttempts) {
-        clearInterval(pollingTimer.current);
-        pollingTimer.current = null;
-        return;
-      }
-      try {
-        const res = await fetch(`/api/check-order?orderId=${encodeURIComponent(outTradeNo)}&t=${Date.now()}`);
-        const data = await res.json();
-
-        if (data.paid) {
-          clearInterval(pollingTimer.current);
-          pollingTimer.current = null;
-          setShowWxModal(false);
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem("pendingOrderId");
-          }
-          alert("🎉 支付成功！页面即将刷新...");
-          window.location.reload();
-        }
-      } catch (err) {
-        console.error("查询订单状态出错:", err);
-      }
-    }, 2000);
-  };
-
   useEffect(() => {
     if (!dataset || dataset.isPaid) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("pendingOrderId");
-      }
+      if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
       return;
     }
-    if (typeof window === "undefined") return;
-    const pendingOrderId = window.localStorage.getItem("pendingOrderId");
+    const pendingOrderId = localStorage.getItem(pendingOrderKey);
     if (pendingOrderId) {
       startPolling(pendingOrderId);
     }
-  }, [dataset]);
+  }, [dataset, pendingOrderKey, startPolling]);
 
   // 4. 关闭弹窗并清理轮询
   const closeWxModal = () => {
     setShowWxModal(false);
-    if (pollingTimer.current) clearInterval(pollingTimer.current);
+    if (pollingTimer.current) clearTimeout(pollingTimer.current);
   };
 
   if (loading) {
@@ -234,7 +249,7 @@ export default function DatasetDetail() {
   if (!dataset) {
     return (
       <Layout title="404">
-        <div className={styles.emptyBox}>资源不存在</div>
+        <div className={styles.emptyBox}>{loadError || "资源不存在"}</div>
       </Layout>
     );
   }
@@ -309,6 +324,7 @@ export default function DatasetDetail() {
                 ) : (
                   <div>
                     <button
+                      type="button"
                       onClick={handleBuy}
                       disabled={isPaying}
                       className={styles.wechatBtn}
@@ -329,8 +345,16 @@ export default function DatasetDetail() {
 
       {showWxModal && (
         <div className={styles.modalOverlay} onClick={closeWxModal}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>微信扫码支付</h3>
+          <div
+            className={styles.modalContent}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="payment-dialog-title" className={styles.modalTitle}>
+              微信扫码支付
+            </h3>
             <div className={styles.qrWrapper}>
               <QRCodeSVG value={wxQrCode} size={200} />
             </div>

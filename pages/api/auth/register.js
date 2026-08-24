@@ -1,17 +1,27 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 import { saveUser } from "../../../lib/db";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
+import {
+  isValidEmail,
+  normalizeEmail,
+  requireSameOrigin,
+} from "../../../lib/security";
 
 async function registerHandler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: "Method Not Allowed" });
   }
+  if (!requireSameOrigin(req, res)) return;
 
   const rawEmail = req.body?.email;
-  const email = String(rawEmail || "").trim().toLowerCase();
+  const email = normalizeEmail(rawEmail);
   const otp = String(req.body?.otp || "").trim();
   const password = String(req.body?.password || "");
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ message: "请输入有效的邮箱地址" });
+  }
 
   const sessionOtp = req.session.otp;
   const now = Date.now();
@@ -31,8 +41,8 @@ async function registerHandler(req, res) {
     return res.status(400).json({ message: "验证码错误或已过期" });
   }
 
-  if (password.length < 8) {
-    return res.status(400).json({ message: "密码至少 8 位" });
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: "密码长度应为 8–128 位" });
   }
 
   try {
@@ -58,7 +68,11 @@ async function registerHandler(req, res) {
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    return res.status(400).json({ message: error.message || "注册失败" });
+    if (error?.message === "该邮箱已注册") {
+      return res.status(409).json({ message: "该邮箱已注册" });
+    }
+    console.error("注册失败:", error);
+    return res.status(500).json({ message: "注册失败，请稍后重试" });
   }
 }
 

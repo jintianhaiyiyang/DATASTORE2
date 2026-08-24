@@ -1,5 +1,6 @@
 import Head from "next/head";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { useSiteSettings } from "../lib/useSiteSettings";
@@ -23,7 +24,7 @@ export default function Layout({ title, children }) {
   const siteTitle = siteSettings.siteTitle || "DATA STORE";
   const pageTitle = siteSettings.pageTitle || siteTitle || "数据小商店";
   const footerText =
-    siteSettings.footerText || "© 2026 数据小商店 DataStore Inc. | 赋能商业决策";
+    siteSettings.footerText || "数据小商店 DataStore | 赋能商业决策";
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -33,9 +34,11 @@ export default function Layout({ title, children }) {
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    window.location.href = "/";
+    const response = await fetch("/api/auth/logout", { method: "POST" });
+    if (response.ok) {
+      setUser(null);
+      await router.push("/");
+    }
   };
 
   const linkClass = (path) =>
@@ -52,12 +55,13 @@ export default function Layout({ title, children }) {
         <div className={styles.navInner}>
           <Link href="/" className={styles.brand} aria-label={siteTitle}>
             {logoUrl ? (
-              <img
+              <Image
                 src={logoUrl}
                 alt=""
                 className={styles.logoImg}
                 width={32}
                 height={32}
+                unoptimized
               />
             ) : (
               <LogoIcon />
