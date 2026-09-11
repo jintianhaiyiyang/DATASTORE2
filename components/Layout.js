@@ -18,6 +18,8 @@ const LogoIcon = () => (
 export default function Layout({ title, children }) {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const siteSettings = useSiteSettings();
   // Values come from SSR + provider — no client-only flash of defaults
   const logoUrl = siteSettings.logoUrl || "";
@@ -34,10 +36,12 @@ export default function Layout({ title, children }) {
   }, []);
 
   const handleLogout = async () => {
-    const response = await fetch("/api/auth/logout", { method: "POST" });
-    if (response.ok) {
-      setUser(null);
-      await router.push("/");
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error();
+      window.location.assign(new URL("/", window.location.origin).toString());
+    } catch {
+      setLogoutError("退出失败，请检查网络后重试");
     }
   };
 
@@ -48,10 +52,11 @@ export default function Layout({ title, children }) {
     <div className={styles.shell}>
       <Head>
         <title>{title ? `${title} - ${pageTitle}` : pageTitle}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       </Head>
 
-      <nav className={styles.nav}>
+      <a href="#main-content" className={styles.skipLink}>跳到正文</a>
+      <nav className={styles.nav} aria-label="主导航">
         <div className={styles.navInner}>
           <Link href="/" className={styles.brand} aria-label={siteTitle}>
             {logoUrl ? (
@@ -69,7 +74,11 @@ export default function Layout({ title, children }) {
             <span className={styles.brandText}>{siteTitle}</span>
           </Link>
 
-          <div className={styles.navRight}>
+          <button type="button" className={styles.menuToggle} aria-expanded={menuOpen} aria-controls="primary-navigation"
+            onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? "收起" : "菜单"}</button>
+          <div id="primary-navigation" className={`${styles.navRight} ${menuOpen ? styles.navOpen : ""}`}
+            onClick={(event) => { if (event.target.closest("a")) setMenuOpen(false); }}
+            onKeyDown={(event) => { if (event.key === "Escape") { setMenuOpen(false); event.currentTarget.previousElementSibling?.focus(); } }}>
             <Link href="/" className={linkClass("/")}>
               首页
             </Link>
@@ -88,7 +97,7 @@ export default function Layout({ title, children }) {
 
             {user && user.isLoggedIn ? (
               <>
-                <span className={styles.userChip} title={user.username}>
+                <span className={styles.userChip} title={user.username || user.email}>
                   {user.username}
                 </span>
                 <button type="button" onClick={handleLogout} className={styles.logoutBtn}>
@@ -104,7 +113,8 @@ export default function Layout({ title, children }) {
         </div>
       </nav>
 
-      <main className={styles.main}>{children}</main>
+      {logoutError && <p role="alert" className={styles.navError}>{logoutError}</p>}
+      <main id="main-content" className={styles.main}>{children}</main>
 
       <footer className={styles.footer}>{footerText}</footer>
     </div>

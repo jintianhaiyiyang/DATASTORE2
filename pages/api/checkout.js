@@ -1,17 +1,18 @@
 import { withIronSessionApiRoute } from "../../lib/session";
-import { getDatasets, getPurchasedIds, saveOrder } from "../../lib/db";
-import { createWxPay, unwrapWxResult } from "../../lib/wxpay";
+import { getDatasets, getPurchasedIds, getOrder, markOrderPaid, saveOrder, updateUserPurchase } from "../../lib/db";
+import { isOrderOwner, parsePaymentAttach, validatePaidOrder } from "../../lib/orderValidation";
+import { createWxPay, getJsapiPayParams, truncateUtf8, unwrapWxResult } from "../../lib/wxpay";
 import { consumeRateLimit } from "../../lib/rateLimit";
 import {
   getClientIp,
   hashKey,
   normalizeEmail,
   paymentOrderId,
-  randomId,
   requireSameOrigin,
 } from "../../lib/security";
 
 async function checkoutHandler(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: "Method Not Allowed" });
@@ -29,12 +30,15 @@ async function checkoutHandler(req, res) {
     });
   }
 
-  const { datasetId, clientType } = req.body || {};
+  const { datasetId, clientType, previousOrderId } = req.body || {};
   if (datasetId === undefined || datasetId === null || datasetId === "") {
     return res.status(400).json({ message: "缺少 datasetId" });
   }
   if (clientType && !["native", "h5", "jsapi"].includes(clientType)) {
     return res.status(400).json({ message: "支付类型无效" });
+  }
+  if (previousOrderId !== undefined && (typeof previousOrderId !== "string" || !/^[A-Za-z0-9_*\-]{6,64}$/.test(previousOrderId))) {
+    return res.status(400).json({ message: "原订单号无效" });
   }
 
   try {
@@ -61,7 +65,8 @@ async function checkoutHandler(req, res) {
     }
 
     const price = Number(dataset.price);
-    if (!Number.isFinite(price) || price < 0) {
+    if (!Number.isFinite(price) || price < 0 || price > 1000000 ||
+        Math.round(price * 100) / 100 !== price) {
       return res.status(400).json({ message: "商品价格无效" });
     }
 
@@ -94,9 +99,12 @@ async function checkoutHandler(req, res) {
     const wxpay = createWxPay();
     const tradeType =
       clientType === "h5" ? "h5" : clientType === "jsapi" ? "jsapi" : "native";
+    if (tradeType === "jsapi" && !process.env.WX_APP_SECRET) {
+      return res.status(503).json({ message: "暂时无法在微信内调起支付，请使用扫码支付", fallbackType: "native" });
+    }
     if (
       tradeType === "jsapi" &&
-      (!req.session.wechatOpenId ||
+      (req.session.wechatAppId !== process.env.WX_APP_ID || !req.session.wechatOpenId ||
         !/^[A-Za-z0-9_-]{1,128}$/.test(req.session.wechatOpenId))
     ) {
       return res.status(401).json({ needOauth: true, message: "需要微信授权" });
@@ -105,7 +113,30 @@ async function checkoutHandler(req, res) {
     if (tradeType === "h5" && clientIp === "unknown") {
       return res.status(400).json({ message: "无法识别客户端 IP" });
     }
-    const description = `购买: ${dataset.name}`.slice(0, 127);
+    // A manual method switch must not leave two payable orders behind.
+    if (previousOrderId) {
+      const previous = await getOrder(previousOrderId);
+      if (!isOrderOwner(previous, email) || previous.datasetId !== String(dataset.id)) {
+        return res.status(404).json({ message: "原订单不存在，请刷新页面重试" });
+      }
+      if (previous.status === "paid") return res.status(409).json({ message: "你已购买该资源，请直接下载" });
+      const payment = unwrapWxResult(await wxpay.query({ out_trade_no: previousOrderId }));
+      if (payment.trade_state === "SUCCESS") {
+        if (!validatePaidOrder({ order: previous, payment, attach: parsePaymentAttach(payment.attach),
+          expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) throw new Error("原订单校验失败");
+        if (!await updateUserPurchase(email, dataset.id)) throw new Error("购买权限保存失败");
+        await markOrderPaid(previousOrderId, payment.transaction_id);
+        return res.status(409).json({ message: "你已购买该资源，请直接下载" });
+      }
+      if (payment.trade_state === "USERPAYING") {
+        return res.status(425).json({ message: "原订单正在支付，请先检查支付结果" });
+      }
+      if (payment.trade_state === "NOTPAY") unwrapWxResult(await wxpay.close(previousOrderId));
+      else if (!["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state)) {
+        throw new Error("无法确认原订单状态");
+      }
+    }
+    const description = truncateUtf8(`购买: ${dataset.name}`, 127);
     const attach = JSON.stringify({ orderId: outTradeNo });
     const baseParams = {
       appid: process.env.WX_APP_ID,
@@ -124,6 +155,8 @@ async function checkoutHandler(req, res) {
       amount: amountInCents,
       currency: "CNY",
       clientType: tradeType,
+      appid: process.env.WX_APP_ID,
+      mchid: process.env.WX_MCH_ID,
     });
 
     if (tradeType === "jsapi") {
@@ -135,30 +168,10 @@ async function checkoutHandler(req, res) {
       });
 
       const data = unwrapWxResult(result);
-      const prepayId = data.prepay_id;
-      if (!prepayId) {
-        throw new Error("JSAPI预支付单创建失败");
-      }
-
-      const timeStamp = Math.floor(Date.now() / 1000).toString();
-      const nonceStr = randomId().slice(-24);
-      const pkg = `prepay_id=${prepayId}`;
-      // JSAPI paySign message format required by WeChat
-      const paySign = wxpay.sign(
-        `${process.env.WX_APP_ID}\n${timeStamp}\n${nonceStr}\n${pkg}\n`
-      );
-
       return res.status(200).json({
         type: "jsapi",
         outTradeNo,
-        payParams: {
-          appId: process.env.WX_APP_ID,
-          timeStamp,
-          nonceStr,
-          package: pkg,
-          signType: "RSA",
-          paySign,
-        },
+        payParams: getJsapiPayParams(data, wxpay, process.env.WX_APP_ID),
       });
     }
 
@@ -172,7 +185,7 @@ async function checkoutHandler(req, res) {
       });
 
       const data = unwrapWxResult(result);
-      const mwebUrl = data.mweb_url;
+      const mwebUrl = data.h5_url || data.mweb_url;
       if (!mwebUrl) {
         throw new Error("H5 支付链接创建失败");
       }
@@ -194,7 +207,12 @@ async function checkoutHandler(req, res) {
       status: err?.status,
       providerMessage: err?.providerMessage,
     });
-    return res.status(500).json({ message: "支付初始化失败，请稍后重试" });
+    return res.status(502).json({
+      message: clientType === "native"
+        ? "二维码暂时无法生成，请稍后重试或联系站点管理员"
+        : "暂时无法调起微信支付，请尝试下方的扫码支付",
+      fallbackType: clientType === "native" ? undefined : "native",
+    });
   }
 }
 

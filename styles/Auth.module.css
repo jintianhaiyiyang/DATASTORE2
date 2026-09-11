@@ -60,7 +60,7 @@
   border: 1px solid var(--border);
   background: var(--bg-page);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
@@ -78,7 +78,11 @@
 
 .otpRow .input {
   flex: 1;
+  min-width: 0;
 }
+
+.label, .otpBtn, .alert { font-size: 14px; }
+.switchBtn { min-height: 44px; }
 
 .otpBtn {
   flex-shrink: 0;

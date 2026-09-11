@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 import Layout from "../components/Layout";
@@ -30,26 +29,36 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [retry, setRetry] = useState(0);
+  const searchTerm = query.trim();
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
         const [artRes, dsRes] = await Promise.all([
-          fetch("/api/articles"),
-          fetch("/api/datasets"),
+          fetch("/api/articles", { signal: controller.signal }),
+          fetch("/api/datasets", { signal: controller.signal }),
         ]);
         if (!artRes.ok || !dsRes.ok) throw new Error("内容加载失败");
         const artData = await artRes.json();
         const dsData = await dsRes.json();
+        if (controller.signal.aborted) return;
         setArticles(Array.isArray(artData) ? artData : []);
         setDatasets(Array.isArray(dsData) ? dsData : []);
+        setLoadError("");
       } catch (e) {
+        if (controller.signal.aborted) return;
         console.error(e);
         setLoadError("暂时无法加载内容，请稍后刷新重试");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     fetchData();
-  }, []);
+    return () => controller.abort();
+  }, [retry]);
 
   const articleFuse = useMemo(
     () => new Fuse(articles, { keys: ["title", "summary"], threshold: 0.35 }),
@@ -61,14 +70,14 @@ export default function HomePage() {
   );
 
   const filteredArticles = useMemo(() => {
-    if (!query) return articles;
-    return articleFuse.search(query).map((r) => r.item);
-  }, [query, articleFuse, articles]);
+    if (!searchTerm) return articles;
+    return articleFuse.search(searchTerm).map((r) => r.item);
+  }, [searchTerm, articleFuse, articles]);
 
   const filteredDatasets = useMemo(() => {
-    if (!query) return datasets;
-    return datasetFuse.search(query).map((r) => r.item);
-  }, [query, datasetFuse, datasets]);
+    if (!searchTerm) return datasets;
+    return datasetFuse.search(searchTerm).map((r) => r.item);
+  }, [searchTerm, datasetFuse, datasets]);
 
   const showDatasets = activeTab === "all" || activeTab === "dataset";
   const showArticles = activeTab === "all" || activeTab === "article";
@@ -84,10 +93,6 @@ export default function HomePage() {
 
   return (
     <Layout>
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      </Head>
-
       <div className={styles.page}>
         <section className={styles.hero}>
           <div className={styles.heroInner}>
@@ -135,6 +140,7 @@ export default function HomePage() {
               </span>
               <input
                 className={styles.searchInput}
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索数据集、文章..."
@@ -150,6 +156,7 @@ export default function HomePage() {
                 <button
                   key={tab.key}
                   type="button"
+                  aria-pressed={activeTab === tab.key}
                   className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
                   onClick={() => setActiveTab(tab.key)}
                 >
@@ -160,10 +167,12 @@ export default function HomePage() {
           </div>
         </section>
 
-        <main className={styles.main}>
+        <div className={styles.main} aria-busy={loading}>
+          {loading && <div className={styles.empty} role="status">正在加载资源…</div>}
           {loadError && (
             <div className={styles.empty} role="alert">
               <p>{loadError}</p>
+              <button type="button" className={styles.tab} onClick={() => { setLoading(true); setLoadError(""); setRetry((n) => n + 1); }}>重新加载</button>
             </div>
           )}
           {showDatasets && filteredDatasets.length > 0 && (
@@ -230,12 +239,13 @@ export default function HomePage() {
             </section>
           )}
 
-          {totalCount === 0 && (
+          {!loading && !loadError && totalCount === 0 && (
             <div className={styles.empty}>
-              <p>没有找到相关内容，试试其他关键词</p>
+              <p>{searchTerm ? "没有找到相关内容，试试其他关键词" : "这里暂时没有内容，欢迎稍后再来"}</p>
+              {searchTerm && <button type="button" className={styles.tab} onClick={() => setQuery("")}>清除搜索</button>}
             </div>
           )}
-        </main>
+        </div>
 
         {siteSettings.aboutContent && (
           <section id="about" className={styles.aboutSection}>

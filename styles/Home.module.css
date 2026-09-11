@@ -6,7 +6,7 @@
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 72px 24px 56px;
+  padding: 48px 24px 36px;
   text-align: center;
   background:
     radial-gradient(ellipse 80% 60% at 50% -10%, rgba(37, 99, 235, 0.12), transparent 60%),
@@ -128,7 +128,7 @@
   border: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   outline: none;
   box-shadow: var(--shadow-xs);
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -226,11 +226,13 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 16px;
 }
 
 .card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -374,7 +376,8 @@
 }
 
 .aboutContent {
-  font-size: 15px;
+  font-size: 16px;
+  overflow-wrap: anywhere;
   line-height: 1.8;
   color: var(--text-secondary);
 }
@@ -389,8 +392,12 @@
 
 @media (max-width: 640px) {
   .hero {
-    padding: 48px 16px 40px;
+    padding: 28px 16px 24px;
   }
+
+  .logoWrap { width: 56px; height: 56px; margin-bottom: 14px; }
+  .heroDesc { font-size: 16px; margin-bottom: 18px; }
+  .searchBar { padding: 12px 0; }
 
   .main {
     padding: 28px 16px 48px;
@@ -409,3 +416,12 @@
     padding: 22px;
   }
 }
+
+.tab { min-height: 44px; font-size: 14px; }
+.badge { font-size: 12px; }
+.stat span, .sectionCount, .action { font-size: 14px; }
+.empty button { margin-top: 16px; }
+.aboutContent pre, .aboutContent table { display: block; max-width: 100%; overflow: auto; }
+.aboutContent img { height: auto; }
+
+@media (hover: none) { .card:hover { transform: none; } }

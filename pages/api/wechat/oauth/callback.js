@@ -5,6 +5,7 @@ import {
 } from "../../../../lib/security";
 
 export default withIronSessionApiRoute(async function wechatOauthCallback(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
     return res.status(405).json({ message: "Method Not Allowed" });
@@ -27,7 +28,7 @@ export default withIronSessionApiRoute(async function wechatOauthCallback(req, r
 
   if (
     !req.session.wxOAuthState ||
-    !state ||
+    !state || !req.session.wxOAuthExpires || req.session.wxOAuthExpires < Date.now() ||
     !constantTimeEqual(state, req.session.wxOAuthState)
   ) {
     return res.status(400).json({ message: "state 校验失败" });
@@ -37,7 +38,10 @@ export default withIronSessionApiRoute(async function wechatOauthCallback(req, r
   const redirectUrl = req.session.wxOAuthRedirect || siteUrl;
   req.session.wxOAuthState = undefined;
   req.session.wxOAuthRedirect = undefined;
+  req.session.wxOAuthExpires = undefined;
   await req.session.save();
+
+  const safeRedirect = new URL(resolveSameOriginRedirect(redirectUrl, siteUrl));
 
   try {
     const tokenUrl = new URL("https://api.weixin.qq.com/sns/oauth2/access_token");
@@ -52,23 +56,19 @@ export default withIronSessionApiRoute(async function wechatOauthCallback(req, r
     const data = await resp.json();
 
     if (!data.openid || !/^[A-Za-z0-9_-]{1,128}$/.test(data.openid)) {
-      return res.status(502).json({ message: "获取 openid 失败" });
+      throw new Error("获取 openid 失败");
     }
 
     req.session.wechatOpenId = data.openid;
+    req.session.wechatAppId = appId;
     await req.session.save();
 
     // Only allow redirects back to our own site
-    let safeRedirect;
-    try {
-      safeRedirect = resolveSameOriginRedirect(redirectUrl, siteUrl);
-    } catch {
-      safeRedirect = new URL(siteUrl).toString();
-    }
-
-    res.redirect(safeRedirect);
+    safeRedirect.searchParams.set("wechatPay", "ready");
+    res.redirect(safeRedirect.toString());
   } catch (err) {
     console.error("wechat oauth error", err);
-    return res.status(500).json({ message: "微信授权失败" });
+    safeRedirect.searchParams.set("wechatPay", "failed");
+    return res.redirect(safeRedirect.toString());
   }
 });

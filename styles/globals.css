@@ -10,7 +10,7 @@
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
+  --text-tertiary: #64748b;
   --text-inverse: #ffffff;
 
   --primary: #2563eb;
@@ -19,7 +19,7 @@
   --accent: #0ea5e9;
   --success: #059669;
   --success-soft: #d1fae5;
-  --warning: #d97706;
+  --warning: #a34c08;
   --danger: #dc2626;
   --danger-soft: #fee2e2;
 
@@ -51,6 +51,8 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-height) + 24px);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -76,6 +78,17 @@ select {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+input, textarea, select { min-width: 0; }
+button, a { -webkit-tap-highlight-color: rgba(37, 99, 235, 0.12); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 img {

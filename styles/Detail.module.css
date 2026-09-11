@@ -32,17 +32,6 @@
   align-items: start;
 }
 
-@media (max-width: 960px) {
-  .contentGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .rightCol {
-    order: -1;
-    position: static;
-  }
-}
-
 .title {
   font-size: clamp(1.6rem, 3vw, 2.1rem);
   font-weight: 800;
@@ -98,8 +87,8 @@
 .richContent {
   line-height: 1.8;
   color: var(--text-secondary);
-  font-size: 15.5px;
-  word-wrap: break-word;
+  font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
 .richContent img {
@@ -183,7 +172,7 @@
 }
 
 .wechatBtn {
-  background: #07c160;
+  background: #078443;
   color: white;
 }
 
@@ -236,7 +225,18 @@
   color: var(--text-primary);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  width: calc(100% - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+
+.modalContent::backdrop { background: rgba(15, 23, 42, 0.3); }
 
 .modalTitle {
   font-size: 18px;
@@ -245,13 +245,16 @@
 }
 
 .qrWrapper {
-  background: var(--bg-muted);
-  padding: 16px;
+  background: #fff;
+  padding: 4px;
   border-radius: 16px;
   display: inline-block;
   margin-bottom: 16px;
   border: 1px solid var(--border);
+  max-width: 100%;
 }
+
+.qrWrapper svg { display: block; max-width: 100%; height: auto; }
 
 .modalTip {
   color: var(--text-secondary);
@@ -269,6 +272,7 @@
   color: var(--text-secondary);
   font-weight: 600;
   font-size: 14px;
+  margin-top: 10px;
 }
 
 .modalCloseBtn:hover {
@@ -334,7 +338,38 @@
   line-height: 1.85;
   font-size: 16.5px;
   color: var(--text-secondary);
-  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.leftCol, .rightCol { min-width: 0; }
+.resourceHeader { margin-bottom: 26px; max-width: 900px; }
+.resourceLabel { display: inline-block; color: var(--primary); font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.title, .articleTitle, .orderName { overflow-wrap: anywhere; }
+.richContent pre, .articleBody pre { max-width: 100%; overflow: auto; background: var(--bg-muted); padding: 16px; border-radius: 10px; margin: 16px 0; }
+.richContent table, .articleBody table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 16px 0; }
+.richContent th, .richContent td, .articleBody th, .articleBody td { padding: 10px 12px; border: 1px solid var(--border); }
+.richContent ul, .richContent ol { padding-left: 1.5em; }
+.paymentActions { display: grid; gap: 12px; }
+.paymentStatus { font-size: 14px; color: var(--text-secondary); line-height: 1.7; overflow-wrap: anywhere; }
+.paymentError { padding: 12px; color: #a82121; background: var(--danger-soft); border-radius: 10px; font-size: 14px; }
+.secondaryPayBtn, .checkBtn { min-height: 44px; border: 1px solid var(--border-strong); border-radius: 10px; background: white; color: var(--primary); padding: 10px 14px; font-size: 14px; font-weight: 600; }
+.secondaryPayBtn:disabled { opacity: 0.6; }
+.checkBtn { background: transparent; border-color: transparent; }
+.orderName { font-size: 14px; color: var(--text-secondary); margin-bottom: 4px; }
+.modalAmount { font-size: 28px; font-weight: 750; color: var(--text-primary); margin-bottom: 16px; }
+.modalContent .paymentStatus { margin-bottom: 14px; }
+.closeIcon { position: absolute; right: 8px; top: 6px; width: 44px; height: 44px; border: none; background: transparent; font-size: 28px; color: var(--text-secondary); }
+.modalTitle { padding: 0 18px; margin-bottom: 8px; }
+.priceLabel, .securityTip, .tagBadge { font-size: 14px; }
+
+@media (max-width: 960px) {
+  .contentGrid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .rightCol { order: -1; position: static; }
+  .resourceHeader { margin-bottom: 18px; }
+}
+
+@media (max-width: 380px) {
+  .modalContent { padding: 24px 16px 16px; }
 }
 
 .articleBody img {

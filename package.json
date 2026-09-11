@@ -18,8 +18,8 @@
     "bcryptjs": "^3.0.3",
     "fuse.js": "^7.5.0",
     "iron-session": "^8.0.4",
-    "next": "16.3.2",
-    "nodemailer": "^9.0.5",
+    "next": "16.3.4",
+    "nodemailer": "^9.1.1",
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -28,12 +28,12 @@
   },
   "devDependencies": {
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.2",
+    "eslint-config-next": "16.3.4",
     "vitest": "^4.0.0"
   },
   "overrides": {
     "form-data": "^4.0.6",
-    "qs": "^6.15.3",
+    "qs": "^6.16.0",
     "brace-expansion@1.1.12": "1.1.18"
   }
 }

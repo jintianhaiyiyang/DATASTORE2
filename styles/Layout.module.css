@@ -1,5 +1,6 @@
 .shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg-page);
@@ -36,6 +37,8 @@
   /* Reserve space so title/logo swap never jumps the nav */
   min-height: 32px;
 }
+
+.brand svg { flex-shrink: 0; }
 
 .brandText {
   font-size: 17px;
@@ -159,6 +162,23 @@
   font-size: 13px;
   border-top: 1px solid var(--border);
   background: var(--bg-surface);
+  overflow-wrap: anywhere;
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+
+.menuToggle { display: none; }
+.skipLink { position: fixed; top: -100px; left: 16px; padding: 10px 16px; background: var(--bg-surface); z-index: 10001; }
+.skipLink:focus { top: 8px; }
+.navError { color: var(--danger); text-align: center; padding: 12px; }
+.navLink, .aboutPill, .loginBtn, .logoutBtn { min-height: 44px; display: inline-flex; align-items: center; font-size: 14px; }
+
+@media (max-width: 760px) {
+  .menuToggle { display: block; min-height: 44px; padding: 8px 14px; border: 1px solid var(--border); background: var(--bg-surface); border-radius: 10px; color: var(--text-primary); flex-shrink: 0; }
+  .navRight { display: none; position: absolute; top: 100%; left: 0; right: 0; padding: 16px; background: var(--bg-surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-md); max-height: calc(100dvh - var(--nav-height)); overflow: auto; }
+  .navOpen { display: flex; align-items: stretch; flex-direction: column; gap: 8px; }
+  .navOpen .userChip { display: block; max-width: 100%; }
+  .navInner .brandText { max-width: none; }
+  .aboutPill { border-radius: 8px; }
 }
 
 @media (max-width: 640px) {

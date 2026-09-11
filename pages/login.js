@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import styles from "../styles/Auth.module.css";
+import { getLoginReturnPath } from "../lib/paymentClient";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -52,6 +53,7 @@ export default function AuthPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     if (isRegister && password.length < 8) {
       setMessage("密码至少 8 位");
       return;
@@ -72,7 +74,8 @@ export default function AuthPage() {
       });
 
       if (res.ok) {
-        await router.push("/");
+        // Reload the account-aware layout and return to the resource being bought.
+        window.location.assign(getLoginReturnPath(router.query.next));
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -104,10 +107,16 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.field}>
-              <label className={styles.label}>邮箱地址</label>
+              <label htmlFor="login-account" className={styles.label}>{isRegister ? "邮箱地址" : "邮箱或管理员账号"}</label>
               <input
+                id="login-account"
+                name="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 className={styles.input}
-                type="email"
+                type={isRegister ? "email" : "text"}
+                inputMode={isRegister ? "email" : "text"}
                 placeholder="name@example.com"
                 required
                 value={email}
@@ -117,9 +126,14 @@ export default function AuthPage() {
 
             {isRegister && (
               <div className={styles.field}>
-                <label className={styles.label}>邮箱验证码</label>
+              <label htmlFor="login-otp" className={styles.label}>邮箱验证码</label>
                 <div className={styles.otpRow}>
                   <input
+                    id="login-otp"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
                     className={styles.input}
                     type="text"
                     placeholder="6 位数字"
@@ -144,8 +158,12 @@ export default function AuthPage() {
             )}
 
             <div className={styles.field}>
-              <label className={styles.label}>登录密码</label>
+              <label htmlFor="login-password" className={styles.label}>登录密码</label>
               <input
+                id="login-password"
+                name="password"
+                autoComplete={isRegister ? "new-password" : "current-password"}
+                maxLength={128}
                 className={styles.input}
                 type="password"
                 placeholder={isRegister ? "至少 8 位密码" : "请输入密码"}

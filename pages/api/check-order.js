@@ -56,12 +56,14 @@ async function handler(req, res) {
 
     if (tradeState === "SUCCESS") {
       const attach = parsePaymentAttach(data.attach);
-      if (!validatePaidOrder({ order, payment: data, attach })) {
+      if (!validatePaidOrder({ order, payment: data, attach,
+        expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) {
         console.error("[查询订单] 支付平台订单数据与本地订单不一致", orderId);
         return res.status(409).json({ paid: false, message: "订单数据校验失败" });
       }
 
-      await updateUserPurchase(order.email, order.datasetId);
+      const granted = await updateUserPurchase(order.email, order.datasetId);
+      if (!granted) throw new Error("购买权限保存失败");
       await markOrderPaid(orderId, data.transaction_id);
 
       return res.status(200).json({ paid: true });

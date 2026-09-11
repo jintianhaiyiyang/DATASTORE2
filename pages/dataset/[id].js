@@ -1,374 +1,107 @@
 import { useRouter } from "next/router";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import Head from "next/head";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Layout from "../../components/Layout";
-import { QRCodeSVG } from "qrcode.react";
+import PaymentPanel from "../../components/PaymentPanel";
 import styles from "../../styles/Detail.module.css";
 
-function getPaymentClientType() {
-  if (typeof navigator === "undefined") return "native";
-  const ua = navigator.userAgent || "";
-  const isWeChat = /MicroMessenger/i.test(ua);
-  const isIpad =
-    /iPad/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const isMobile = /Android|iPhone|iPod/i.test(ua) || isIpad;
-  if (isWeChat) return "jsapi";
-  if (isMobile) return "h5";
-  return "native";
-}
-
-function subscribeToClientEnvironment() {
-  return () => {};
-}
-
-export default function DatasetDetail() {
-  const router = useRouter();
-  const { id } = router.query;
-  
-  // 状态管理
+function DatasetContent({ id }) {
   const [dataset, setDataset] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  
-  // 支付相关状态
-  const [isPaying, setIsPaying] = useState(false);
-  const [wxQrCode, setWxQrCode] = useState(""); 
-  const [showWxModal, setShowWxModal] = useState(false);
-  const paymentClientType = useSyncExternalStore(
-    subscribeToClientEnvironment,
-    getPaymentClientType,
-    () => "native"
-  );
-  
-  // 轮询定时器引用
-  const pollingTimer = useRef(null);
-
-  const payButtonLabel = paymentClientType === "h5" ? "微信支付" : "微信扫码支付";
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (!router.isReady || !id) return undefined;
     const controller = new AbortController();
-
-    async function loadData() {
+    async function load() {
       try {
         const [dsRes, userRes] = await Promise.all([
-          fetch(`/api/datasets/${encodeURIComponent(id)}`, {
-            signal: controller.signal,
-          }),
-          fetch("/api/auth/me", { signal: controller.signal }),
+          fetch(`/api/datasets/${encodeURIComponent(id)}`, { cache: "no-store", signal: controller.signal }),
+          fetch("/api/auth/me", { cache: "no-store", signal: controller.signal }),
         ]);
-        if (!dsRes.ok) throw new Error(dsRes.status === 404 ? "资源不存在" : "资源加载失败");
-        setDataset(await dsRes.json());
-        if (userRes.ok) setUser(await userRes.json());
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          console.error("加载详情失败:", error);
-          setLoadError(error.message || "资源加载失败");
-        }
+        if (!dsRes.ok) throw new Error(dsRes.status === 404 ? "资源不存在或已下架" : "资源加载失败，请重试");
+        const [data, account] = await Promise.all([dsRes.json(), userRes.ok ? userRes.json() : null]);
+        if (!controller.signal.aborted) { setDataset(data); setUser(account); setError(""); }
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err.message || "网络异常，请重试");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     }
+    void load();
+    return () => controller.abort();
+  }, [id, retry]);
 
-    loadData();
-    return () => {
-      controller.abort();
-      if (pollingTimer.current) clearTimeout(pollingTimer.current);
-    };
-  }, [id, router.isReady]);
+  const refreshAccess = useCallback(async () => {
+    const res = await fetch(`/api/datasets/${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("下载信息刷新失败");
+    const data = await res.json();
+    if (!data.isPaid) throw new Error("下载权限尚未更新");
+    setDataset(data);
+  }, [id]);
 
-  const pendingOrderKey = id ? `pendingOrder:${id}` : "";
-
-  const startPolling = useCallback(
-    (outTradeNo) => {
-      if (!outTradeNo) return;
-      if (pollingTimer.current) clearTimeout(pollingTimer.current);
-
-      let attempts = 0;
-      const poll = async () => {
-        attempts += 1;
-        if (attempts > 150) {
-          pollingTimer.current = null;
-          return;
-        }
-        try {
-          const res = await fetch(
-            `/api/check-order?orderId=${encodeURIComponent(outTradeNo)}&t=${Date.now()}`
-          );
-          const data = await res.json().catch(() => ({}));
-          if (data.paid) {
-            pollingTimer.current = null;
-            setShowWxModal(false);
-            if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
-            router.reload();
-            return;
-          }
-          if (res.status === 404 || res.status === 403) {
-            if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
-            pollingTimer.current = null;
-            return;
-          }
-        } catch (error) {
-          console.error("查询订单状态出错:", error);
-        }
-        pollingTimer.current = setTimeout(poll, 2000);
-      };
-      poll();
-    },
-    [pendingOrderKey, router]
+  if (loading) return <Layout title="加载中"><div className={styles.loadingBox} role="status">正在获取资源详情…</div></Layout>;
+  if (!dataset) return (
+    <Layout title="资源暂不可用"><div className={styles.emptyBox}>
+      <p role="alert">{error || "资源不存在"}</p>
+      <button type="button" className={styles.checkBtn} onClick={() => { setLoading(true); setRetry((n) => n + 1); }}>重新加载</button>
+      <Link href="/" className={styles.backLink}>返回市集</Link>
+    </div></Layout>
   );
-
-  const invokeWeChatPay = (payParams, outTradeNo) => {
-    if (typeof window === "undefined") return;
-    const doInvoke = () => {
-      if (!window.WeixinJSBridge) {
-        alert("请在微信内打开完成支付");
-        return;
-      }
-      window.WeixinJSBridge.invoke(
-        "getBrandWCPayRequest",
-        payParams,
-        (res) => {
-          if (res.err_msg === "get_brand_wcpay_request:ok") {
-            startPolling(outTradeNo);
-          } else if (res.err_msg === "get_brand_wcpay_request:cancel") {
-            alert("已取消支付");
-          } else {
-            alert("支付未完成，请重试");
-          }
-        }
-      );
-    };
-
-    if (window.WeixinJSBridge) {
-      doInvoke();
-    } else {
-      document.addEventListener("WeixinJSBridgeReady", doInvoke, { once: true });
-    }
-  };
-  const handleBuy = async () => {
-    // 强制登录检查
-    if (!user || !user.isLoggedIn) {
-      alert("请先登录后再进行购买");
-      router.push("/login");
-      return;
-    }
-
-    setIsPaying(true);
-    try {
-      // 发起支付请求
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // 固定使用 wechat 支付方式
-        body: JSON.stringify({ datasetId: id, paymentMethod: "wechat", clientType: paymentClientType }),
-      });
-      const data = await res.json();
-
-
-      if (data.needOauth) {
-        if (typeof window !== "undefined") {
-          const redirectUrl = window.location.href.split("#")[0];
-          await router.push(
-            `/api/wechat/oauth/start?redirect=${encodeURIComponent(redirectUrl)}`
-          );
-          return;
-        }
-      }
-
-      if (!res.ok) throw new Error(data.message || "初始化支付失败");
-
-      if (data.outTradeNo && pendingOrderKey) {
-        localStorage.setItem(pendingOrderKey, data.outTradeNo);
-      }
-
-      if (data.type === "jsapi") {
-        if (!data.payParams) throw new Error("支付参数缺失");
-        invokeWeChatPay(data.payParams, data.outTradeNo);
-        return;
-      }
-
-      if (data.type === "h5") {
-        if (!data.mwebUrl) throw new Error("支付链接为空");
-        if (typeof window !== "undefined") {
-          const redirectUrl = window.location.href.split("#")[0];
-          const hasRedirect = /[?&]redirect_url=/.test(data.mwebUrl);
-          const separator = data.mwebUrl.includes("?") ? "&" : "?";
-          const jumpUrl = hasRedirect ? data.mwebUrl : `${data.mwebUrl}${separator}redirect_url=${encodeURIComponent(redirectUrl)}`;
-          window.location.assign(jumpUrl);
-          return;
-        }
-      }
-
-      if (data.type === "qrcode") {
-        setWxQrCode(data.codeUrl);
-        setShowWxModal(true);
-
-        startPolling(data.outTradeNo);
-      }
-    } catch (e) {
-      alert("支付错误: " + e.message);
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!dataset || dataset.isPaid) {
-      if (pendingOrderKey) localStorage.removeItem(pendingOrderKey);
-      return;
-    }
-    const pendingOrderId = localStorage.getItem(pendingOrderKey);
-    if (pendingOrderId) {
-      startPolling(pendingOrderId);
-    }
-  }, [dataset, pendingOrderKey, startPolling]);
-
-  // 4. 关闭弹窗并清理轮询
-  const closeWxModal = () => {
-    setShowWxModal(false);
-    if (pollingTimer.current) clearTimeout(pollingTimer.current);
-  };
-
-  if (loading) {
-    return (
-      <Layout title="加载中...">
-        <div className={styles.loadingBox}>正在获取资源详情...</div>
-      </Layout>
-    );
-  }
-  if (!dataset) {
-    return (
-      <Layout title="404">
-        <div className={styles.emptyBox}>{loadError || "资源不存在"}</div>
-      </Layout>
-    );
-  }
-
   const tags = Array.isArray(dataset.tags) ? dataset.tags.filter(Boolean) : [];
+  const free = Number(dataset.price) === 0;
+  const downloadAvailable = typeof dataset.downloadUrl === "string" && /^https:\/\//i.test(dataset.downloadUrl);
 
   return (
     <Layout title={dataset.name}>
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      </Head>
-
       <div className={styles.mainWrapper}>
         <div className={styles.container}>
-          <Link href="/" className={styles.backLink}>
-            ← 返回市集
-          </Link>
-
+          <Link href="/" className={styles.backLink}>← 返回市集</Link>
+          <header className={styles.resourceHeader}>
+            <span className={styles.resourceLabel}>数据资源</span>
+            <h1 className={styles.title}>{dataset.name}</h1>
+            {tags.length > 0 && <div className={styles.tagsRow}>{tags.map((tag) => <span key={tag} className={styles.tagBadge}>{tag}</span>)}</div>}
+          </header>
           <div className={styles.contentGrid}>
             <div className={styles.leftCol}>
-              <h1 className={styles.title}>{dataset.name}</h1>
-              {tags.length > 0 && (
-                <div className={styles.tagsRow}>
-                  {tags.map((tag, i) => (
-                    <span key={i} className={styles.tagBadge}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className={styles.detailCard}>
-                <h3 className={styles.cardHeader}>资源介绍</h3>
-                <div
-                  className={styles.richContent}
-                  dangerouslySetInnerHTML={{
-                    __html: dataset.richContent || dataset.description || "暂无介绍",
-                  }}
-                />
-              </div>
+              <section className={styles.detailCard}>
+                <h2 className={styles.cardHeader}>资源介绍</h2>
+                {dataset.richContent ? (
+                  <div className={styles.richContent} dangerouslySetInnerHTML={{ __html: dataset.richContent }} />
+                ) : (
+                  <p className={styles.richContent}>{dataset.description || "暂无介绍"}</p>
+                )}
+              </section>
             </div>
-
-            <div className={styles.rightCol}>
+            <aside className={styles.rightCol} aria-label="购买与下载">
               <div className={styles.actionCard}>
                 <div className={styles.priceSection}>
-                  <span className={styles.priceLabel}>价格</span>
-                  <div
-                    className={`${styles.priceValue} ${
-                      dataset.isPaid ? styles.priceUnlocked : ""
-                    }`}
-                  >
-                    {dataset.isPaid
-                      ? "已解锁"
-                      : Number(dataset.price) === 0
-                        ? "免费"
-                        : `¥${dataset.price}`}
+                  <span className={styles.priceLabel}>{free ? "免费资源" : dataset.isPaid ? "资源权限" : "一次购买，解锁下载"}</span>
+                  <div className={`${styles.priceValue} ${dataset.isPaid ? styles.priceUnlocked : ""}`}>
+                    {free ? "免费" : dataset.isPaid ? "已解锁" : `¥${Number(dataset.price).toFixed(2)}`}
                   </div>
                 </div>
-
                 {dataset.isPaid ? (
-                  <div>
-                    <p className={styles.unlockedHint}>已获得此资源，可直接下载</p>
-                    <a
-                      href={dataset.downloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.downloadBtn}
-                    >
-                      前往下载
-                    </a>
-                  </div>
-                ) : (
-                  <div>
-                    <button
-                      type="button"
-                      onClick={handleBuy}
-                      disabled={isPaying}
-                      className={styles.wechatBtn}
-                    >
-                      {isPaying ? "正在创建订单..." : payButtonLabel}
-                    </button>
-                  </div>
-                )}
-
-                <div className={styles.securityTip}>
-                  支付成功后自动解锁下载链接
-                </div>
+                  downloadAvailable ? <>
+                    <p className={styles.unlockedHint}>{free ? "无需付款，可直接获取资源" : "已获得此资源，可直接下载"}</p>
+                    <a href={dataset.downloadUrl} target="_blank" rel="noopener noreferrer" className={styles.downloadBtn}>前往下载</a>
+                  </> : <p className={styles.paymentError}>下载链接暂不可用，请联系站点管理员</p>
+                ) : <PaymentPanel dataset={dataset} user={user} onPaid={refreshAccess} />}
+                <div className={styles.securityTip}>{dataset.isPaid ? "下载链接将在新窗口打开" : "由微信支付处理，付款确认后自动解锁"}</div>
               </div>
-            </div>
+            </aside>
           </div>
         </div>
       </div>
-
-      {showWxModal && (
-        <div className={styles.modalOverlay} onClick={closeWxModal}>
-          <div
-            className={styles.modalContent}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payment-dialog-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="payment-dialog-title" className={styles.modalTitle}>
-              微信扫码支付
-            </h3>
-            <div className={styles.qrWrapper}>
-              <QRCodeSVG value={wxQrCode} size={200} />
-            </div>
-            <p className={styles.modalTip}>
-              请使用微信扫一扫完成支付
-              <br />
-              支付成功后页面将自动刷新
-            </p>
-            <button type="button" className={styles.modalCloseBtn} onClick={closeWxModal}>
-              取消
-            </button>
-          </div>
-        </div>
-      )}
     </Layout>
   );
+}
+
+export default function DatasetDetail() {
+  const router = useRouter();
+  const id = typeof router.query.id === "string" ? router.query.id : "";
+  if (!router.isReady || !id) return <Layout title="加载中"><div className={styles.loadingBox} role="status">正在获取资源详情…</div></Layout>;
+  // A route change must discard old payment state and abort its requests.
+  return <DatasetContent key={id} id={id} />;
 }

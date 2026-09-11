@@ -147,7 +147,7 @@
 
 .formGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -156,6 +156,7 @@
 }
 
 .field {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -175,7 +176,7 @@
   border: 1px solid var(--border);
   background: var(--bg-page);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
@@ -267,9 +268,17 @@
 
 .tableWrap {
   overflow-x: auto;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
+
+.card, .page { min-width: 0; }
+.table td { overflow-wrap: anywhere; }
+.table { min-width: 500px; }
+.editBtn, .deleteBtn, .logoutBtn { min-height: 44px; font-size: 14px; }
+.userInfo { flex-wrap: wrap; overflow-wrap: anywhere; }
+.label { font-size: 14px; }
 
 .table {
   width: 100%;

@@ -5,6 +5,7 @@ import {
 } from "../../../../lib/security";
 
 export default withIronSessionApiRoute(async function wechatOauthStart(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
     return res.status(405).json({ message: "Method Not Allowed" });
@@ -15,7 +16,7 @@ export default withIronSessionApiRoute(async function wechatOauthStart(req, res)
 
   const appId = process.env.WX_APP_ID;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!appId || !siteUrl) {
+  if (!appId || !siteUrl || !process.env.WX_APP_SECRET) {
     return res.status(500).json({ message: "微信配置缺失" });
   }
 
@@ -29,6 +30,7 @@ export default withIronSessionApiRoute(async function wechatOauthStart(req, res)
   const state = randomId("wx_");
   req.session.wxOAuthState = state;
   req.session.wxOAuthRedirect = redirectUrl;
+  req.session.wxOAuthExpires = Date.now() + 10 * 60 * 1000;
   await req.session.save();
 
   const callbackUrl = new URL("/api/wechat/oauth/callback", siteUrl).toString();
