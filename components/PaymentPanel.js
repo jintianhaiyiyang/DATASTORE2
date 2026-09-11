@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/router";
 import { QRCodeSVG } from "qrcode.react";
-import { getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
 import styles from "../styles/Detail.module.css";
 
 const subscribe = () => () => {};
@@ -165,7 +165,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
     };
   }, [orderId, key, dataset.id, onPaid, checkVersion]);
 
-  const buy = async (type) => {
+  const buy = useCallback(async (type) => {
     if (checkoutRequest.current) return;
     if (!user?.isLoggedIn) {
       await router.push(`/login?next=${encodeURIComponent(router.asPath)}`);
@@ -189,6 +189,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         data = await res.json().catch(() => ({}));
         if (controller.signal.aborted) return;
         if (data.needOauth) {
+          rememberWechatPayIntent(key);
           const back = new URL(window.location.href);
           back.searchParams.delete("wechatPay");
           // A full navigation is required for the external OAuth redirect.
@@ -225,12 +226,22 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
-  };
+  }, [dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn]);
+
+  useEffect(() => {
+    if (clientType !== "jsapi" || router.query.wechatPay !== "ready" || !user?.isLoggedIn) return;
+    // Defer until pending-order restoration has rendered. Strict Mode can
+    // cancel this timer without consuming the one-time intent prematurely.
+    const timer = setTimeout(() => {
+      if (consumeWechatPayIntent(key)) void buy("jsapi");
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [buy, clientType, key, router.query.wechatPay, user?.isLoggedIn]);
 
   return (
     <>
       <div className={styles.paymentActions}>
-        {router.query.wechatPay === "ready" && <p className={styles.paymentStatus}>微信授权已完成，点击微信支付继续</p>}
+        {router.query.wechatPay === "ready" && <p className={styles.paymentStatus}>微信授权已完成，正在继续支付。若未弹出收银台，可点击下方按钮重试。</p>}
         {router.query.wechatPay === "failed" && <p className={styles.paymentError}>微信授权未完成，可重试或使用扫码支付</p>}
         {error && <p className={styles.paymentError} role="alert">{error}</p>}
         <button type="button" onClick={() => buy(clientType)} disabled={busy} className={styles.wechatBtn}>

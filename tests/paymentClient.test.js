@@ -1,9 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("payment browser compatibility", () => {
+  it("resumes an explicit OAuth purchase exactly once for the same account and resource", () => {
+    const values = new Map();
+    vi.stubGlobal("window", { sessionStorage: {
+      setItem: (key, value) => values.set(key, value),
+      getItem: (key) => values.get(key) ?? null,
+      removeItem: (key) => values.delete(key),
+    } });
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(false);
+    rememberWechatPayIntent("buyer:resource1");
+    expect(consumeWechatPayIntent("other:resource1")).toBe(false);
+    expect(consumeWechatPayIntent("buyer:resource2")).toBe(false);
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(true);
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(false);
+  });
+
+  it("does not resume an expired purchase or a purchase from another tab", () => {
+    vi.useFakeTimers();
+    const values = new Map();
+    const storage = {
+      setItem: (key, value) => values.set(key, value),
+      getItem: (key) => values.get(key) ?? null,
+      removeItem: (key) => values.delete(key),
+    };
+    vi.stubGlobal("window", { sessionStorage: storage });
+    rememberWechatPayIntent("buyer:resource1");
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(false);
+    rememberWechatPayIntent("buyer:resource1");
+    vi.stubGlobal("window", { sessionStorage: { getItem: () => null, removeItem: () => {} } });
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(false);
+  });
+
+  it("keeps manual payment available when session storage is denied", () => {
+    vi.stubGlobal("window", { get sessionStorage() { throw new Error("SecurityError"); } });
+    expect(() => rememberWechatPayIntent("buyer:resource1")).not.toThrow();
+    expect(consumeWechatPayIntent("buyer:resource1")).toBe(false);
+  });
+
   it.each([
     [{ userAgent: "Mozilla iPhone Safari" }, "h5"],
     [{ userAgent: "Mozilla Android Chrome" }, "h5"],
