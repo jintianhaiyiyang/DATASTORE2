@@ -1,9 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { consumeWechatPayIntent, getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("payment browser compatibility", () => {
+  it("preserves the safe merchant permission explanation from checkout", async () => {
+    const body = { code: "WECHAT_PAY_NO_AUTH", message: "商家的微信扫码支付权限未开通或不可用，请联系站点管理员。" };
+    expect(await readCheckoutResponse(new Response(JSON.stringify(body), { status: 422 }))).toEqual(body);
+  });
+
+  it.each([
+    [502, "<html>private-upstream-error</html>"], [503, ""], [500, "null"], [400, '{"message":{}}'], [429, '{"message":"  "}'],
+  ])("keeps HTTP %s visible when the checkout error body cannot be used", async (status, body) => {
+    const data = await readCheckoutResponse(new Response(body, { status }));
+    expect(data.message).toContain(`HTTP ${status}`);
+    expect(data.message).not.toContain("private-upstream-error");
+  });
+
+  it.each(["null", "[]", "<html>error</html>"])("rejects an invalid success response without continuing payment", async (body) => {
+    await expect(readCheckoutResponse(new Response(body))).rejects.toThrow("支付服务响应异常");
+  });
+
   it("resumes an explicit OAuth purchase exactly once for the same account and resource", () => {
     const values = new Map();
     vi.stubGlobal("window", { sessionStorage: {

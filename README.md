@@ -105,7 +105,9 @@ WX_KEY=商户API私钥PEM
 https://你的域名/api/notify/wechat
 ```
 
-还需在微信商户平台/公众号后台配置支付目录、通知域名和网页授权域名。
+`WX_APP_SECRET` 仅用于微信内 JSAPI 的公众号网页授权；H5 和 Native 不需要它。使用 JSAPI 时，`WX_APP_ID` 与 `WX_APP_SECRET` 必须属于同一个已认证、支持 JSAPI 支付的公众号，并完成 AppID 与商户号的绑定。
+
+环境变量不等于产品权限。还需在微信商户平台开通对应支付产品、配置 H5 支付域名或 JSAPI 支付授权目录；JSAPI 还需在公众号后台配置网页授权域名。通知地址由下单接口发送给微信，必须能通过公网 HTTPS 访问。
 
 ## 常用命令
 
@@ -132,6 +134,28 @@ npm audit        # 依赖安全审计
 查单接口只能查询当前登录用户自己的本地订单。客户端提供的订单号、回调 `attach` 或解密成功本身都不足以授予下载权限。
 
 ### 手机、平板支付与排错
+
+如果 Vercel `/api/checkout` 日志出现 `code: 'NO_AUTH'`、`status: 403`，且 `providerMessage` 为“商户号该产品权限未开通”，说明微信已收到下单请求，但商户缺少当前支付产品的使用权限。增加 `WX_APP_SECRET`、更改二维码组件或反复重新部署，都不能开通这项权限。
+
+登录[微信商户平台的产品中心](https://pay.wechatpay.cn/static/product/product_index.shtml)，检查 `WX_MCH_ID` 对应商户的产品状态：
+
+| 使用场景 | 所需产品 | 配置要点 |
+| --- | --- | --- |
+| 手机、平板的 Safari / Chrome 等外部浏览器跳转微信 | H5 支付 | 产品需审核开通；H5 支付域名必须与实际访问域名完全一致 |
+| 在微信内打开网页并弹出支付窗口 | JSAPI 支付 | 产品权限、AppID 与商户绑定、支付授权目录；公众号网页授权域名及匹配的 `WX_APP_SECRET` |
+| 电脑或移动端显示支付二维码 | Native 支付 | 独立的 Native 产品权限；开通 H5 / JSAPI 不能代替它 |
+
+微信官方步骤：[H5 接入准备](https://pay.wechatpay.cn/doc/v3/merchant/4015614193)、[H5 权限申请](https://pay.wechatpay.cn/doc/v3/merchant/4012791841)、[JSAPI 接入准备](https://pay.wechatpay.cn/doc/v3/merchant/4015423216)。H5 申请需要符合支持的商户主体类型，并提交支付域名、ICP备案截图和经营内容等审核材料；JSAPI 需要已认证且支持该产品的公众号。应以商户平台实际审核结果为准。
+
+本项目正式站点的配置对应关系：
+
+- Vercel **Production**：`NEXT_PUBLIC_SITE_URL=https://datastore.goingcloud.cc`；通用支付变量为 `WX_APP_ID`、`WX_MCH_ID`、`WX_API_V3_KEY`、`WX_CERT`、`WX_KEY`，JSAPI 再加 `WX_APP_SECRET`。
+- H5：[支付域名](https://pay.wechatpay.cn/doc/v3/merchant/4013287193)填写 `datastore.goingcloud.cc`，不带协议和路径；只填 `goingcloud.cc` 不能匹配这个子域名。应从正式域名进入支付，不能把未登记的 Vercel 预览域名当正式支付入口。
+- JSAPI：[支付授权目录](https://pay.wechatpay.cn/doc/v3/merchant/4013287088)可配置为 `https://datastore.goingcloud.cc/`（末尾保留 `/`），按官方规则覆盖该域名下的支付页面；若要限制到资源页目录，可配置 `https://datastore.goingcloud.cc/dataset/`。公众号网页授权域名为 `datastore.goingcloud.cc`，OAuth 回调是 `/api/wechat/oauth/callback`。
+- 微信异步通知地址：`https://datastore.goingcloud.cc/api/notify/wechat`，不得要求用户登录或浏览器人机验证。
+- 环境变量更改后需要重新部署才会用于新请求；商户产品开通以微信平台审核结果为准。若产品入口不可用或审核未通过，应通过商户平台处理，代码不能绕过。
+
+权限拒绝现在返回 HTTP 422、`WECHAT_PAY_NO_AUTH` 和对应支付方式的安全提示；服务端日志同时记录 `paymentType`、`stage` 与微信错误码。查旧订单/关旧订单失败不会被误报成新支付产品未开通，也不会自动创建另一个订单。其他上游故障保留 502；前端遇到 HTML、空白或畸形响应时显示 HTTP 状态，避免只留下无法定位的通用提示。
 
 - 普通手机浏览器和 iPad（包括桌面 UA 模式）优先使用 H5；微信内优先使用 JSAPI。无法调起时，点击“显示支付二维码”。Native 也需要商户开通对应支付产品；H5 或 JSAPI 的授权不能替代 Native 权限。
 - H5 需要在商户平台开通，并配置与实际访问站点一致的支付域名。JSAPI 需要正确的 `WX_APP_SECRET`、公众号网页授权域名、支付目录与 AppID/商户绑定；用户点击支付后，如需首次微信授权，授权返回会自动继续调起收银台，最终付款仍由用户在微信内确认。

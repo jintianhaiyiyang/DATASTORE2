@@ -95,13 +95,45 @@ describe("checkout API channel regressions", () => {
     expect(res.body.type).toBe("qrcode");
     expect(res.body.codeUrl).toContain("weixin://");
   });
-  it("offers a QR alternative when H5 is not activated instead of making another order automatically", async () => {
-    mocks.sdk.transactions_h5.mockResolvedValue({ status: 403, error: '{"code":"NO_AUTH","message":"not activated"}' });
-    const req = request(); req.body.clientType = "h5";
+  it.each([
+    ["h5", "手机网页微信支付"], ["jsapi", "微信内支付"], ["native", "微信扫码支付"],
+  ])("explains the merchant permission failure for %s without automatically creating another order", async (type, label) => {
+    mocks.sdk[`transactions_${type}`].mockResolvedValue({ status: 403, error: JSON.stringify({
+      code: "NO_AUTH", message: "商户号该产品权限未开通，请前往商户平台>产品中心检查后重试。", detail: "private-provider-data",
+    }) });
+    const req = request(); req.body.clientType = type;
+    const res = response(); await checkout(req, res);
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toMatchObject({ code: "WECHAT_PAY_NO_AUTH", paymentType: type, message: expect.stringContaining(label) });
+    expect(res.body.message).toContain("权限未开通");
+    expect(res.body.fallbackType).toBe(type === "native" ? undefined : "native");
+    expect(JSON.stringify(res.body)).not.toContain("private-provider-data");
+    expect(console.error).toHaveBeenCalledWith("支付初始化错误:", expect.objectContaining({ paymentType: type, stage: "create_order", code: "NO_AUTH" }));
+    for (const other of ["h5", "jsapi", "native"].filter((channel) => channel !== type)) {
+      expect(mocks.sdk[`transactions_${other}`]).not.toHaveBeenCalled();
+    }
+    expect(mocks.db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(mocks.db.markOrderPaid).not.toHaveBeenCalled();
+  });
+  it("does not mislabel an old-order query permission failure as an unopened new channel", async () => {
+    mocks.sdk.query.mockResolvedValue({ status: 403, error: { code: "NO_AUTH", message: "permission denied" } });
+    const req = request(); req.body.previousOrderId = order.id; req.body.clientType = "h5";
+    const res = response(); await checkout(req, res);
+    expect(res.statusCode).toBe(422);
+    expect(res.body.message).toContain("暂时无法处理订单");
+    expect(res.body.message).not.toContain("手机网页");
+    expect(res.body.fallbackType).toBeUndefined();
+    expect(mocks.db.saveOrder).not.toHaveBeenCalled();
+    expect(mocks.sdk.transactions_h5).not.toHaveBeenCalled();
+  });
+  it("keeps unknown failures private and handles an omitted channel as Native", async () => {
+    mocks.sdk.transactions_native.mockRejectedValue(new Error("private-provider-data"));
+    const req = request(); delete req.body.clientType;
     const res = response(); await checkout(req, res);
     expect(res.statusCode).toBe(502);
-    expect(res.body.fallbackType).toBe("native");
-    expect(mocks.sdk.transactions_native).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ code: "PAYMENT_SERVICE_ERROR", message: expect.stringContaining("二维码暂时无法生成") });
+    expect(res.body.fallbackType).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain("private-provider-data");
   });
   it("requests OAuth before saving an order if openid belongs to another app", async () => {
     const req = request(); req.body.clientType = "jsapi"; req.session.wechatAppId = "old_app";

@@ -41,6 +41,8 @@ async function checkoutHandler(req, res) {
     return res.status(400).json({ message: "原订单号无效" });
   }
 
+  const tradeType = clientType || "native";
+  let stage = "prepare";
   try {
     const datasets = await getDatasets();
     const dataset = datasets.find((d) => String(d.id) === String(datasetId));
@@ -97,8 +99,6 @@ async function checkoutHandler(req, res) {
     }
 
     const wxpay = createWxPay();
-    const tradeType =
-      clientType === "h5" ? "h5" : clientType === "jsapi" ? "jsapi" : "native";
     if (tradeType === "jsapi" && !process.env.WX_APP_SECRET) {
       return res.status(503).json({ message: "暂时无法在微信内调起支付，请使用扫码支付", fallbackType: "native" });
     }
@@ -120,6 +120,7 @@ async function checkoutHandler(req, res) {
         return res.status(404).json({ message: "原订单不存在，请刷新页面重试" });
       }
       if (previous.status === "paid") return res.status(409).json({ message: "你已购买该资源，请直接下载" });
+      stage = "query_previous";
       const payment = unwrapWxResult(await wxpay.query({ out_trade_no: previousOrderId }));
       if (payment.trade_state === "SUCCESS") {
         if (!validatePaidOrder({ order: previous, payment, attach: parsePaymentAttach(payment.attach),
@@ -131,8 +132,10 @@ async function checkoutHandler(req, res) {
       if (payment.trade_state === "USERPAYING") {
         return res.status(425).json({ message: "原订单正在支付，请先检查支付结果" });
       }
-      if (payment.trade_state === "NOTPAY") unwrapWxResult(await wxpay.close(previousOrderId));
-      else if (!["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state)) {
+      if (payment.trade_state === "NOTPAY") {
+        stage = "close_previous";
+        unwrapWxResult(await wxpay.close(previousOrderId));
+      } else if (!["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state)) {
         throw new Error("无法确认原订单状态");
       }
     }
@@ -148,6 +151,7 @@ async function checkoutHandler(req, res) {
       attach,
     };
 
+    stage = "save_order";
     await saveOrder({
       id: outTradeNo,
       datasetId: String(dataset.id),
@@ -159,6 +163,7 @@ async function checkoutHandler(req, res) {
       mchid: process.env.WX_MCH_ID,
     });
 
+    stage = "create_order";
     if (tradeType === "jsapi") {
       const openid = req.session.wechatOpenId;
 
@@ -201,17 +206,35 @@ async function checkoutHandler(req, res) {
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
   } catch (err) {
     console.error("支付初始化错误:", {
+      paymentType: tradeType,
+      stage,
       name: err?.name,
       message: err?.message,
       code: err?.code,
       status: err?.status,
       providerMessage: err?.providerMessage,
     });
+    // A business permission rejection is not a transient gateway failure.
+    // Use a stable, safe response; never forward raw SDK payloads or secrets.
+    if (err?.name === "WxPayError" && err.code === "NO_AUTH") {
+      const label = { h5: "手机网页微信支付", jsapi: "微信内支付", native: "微信扫码支付" }[tradeType];
+      return res.status(422).json({
+        code: "WECHAT_PAY_NO_AUTH",
+        paymentType: tradeType,
+        message: stage === "create_order"
+          ? `商家的${label}权限未开通或不可用，请联系站点管理员。`
+          : "商家的微信支付权限不足，暂时无法处理订单，请联系站点管理员。",
+        // A different channel still requires its own permission. Do not
+        // create another order automatically, especially while switching.
+        fallbackType: stage === "create_order" && tradeType !== "native" ? "native" : undefined,
+      });
+    }
     return res.status(502).json({
-      message: clientType === "native"
+      code: "PAYMENT_SERVICE_ERROR",
+      message: tradeType === "native"
         ? "二维码暂时无法生成，请稍后重试或联系站点管理员"
         : "暂时无法调起微信支付，请尝试下方的扫码支付",
-      fallbackType: clientType === "native" ? undefined : "native",
+      fallbackType: tradeType === "native" ? undefined : "native",
     });
   }
 }

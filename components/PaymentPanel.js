@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/router";
 import { QRCodeSVG } from "qrcode.react";
-import { consumeWechatPayIntent, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
 import styles from "../styles/Detail.module.css";
 
 const subscribe = () => () => {};
@@ -186,7 +186,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
           method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
           body: JSON.stringify({ datasetId: dataset.id, clientType: type, previousOrderId: orderId || undefined }),
         });
-        data = await res.json().catch(() => ({}));
+        data = await readCheckoutResponse(res);
         if (controller.signal.aborted) return;
         if (data.needOauth) {
           rememberWechatPayIntent(key);
@@ -200,7 +200,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         }
         if (res.status === 401) { await router.push(`/login?next=${encodeURIComponent(router.asPath)}`); return; }
         if (res.status === 409) { await onPaid(); return; }
-        if (!res.ok) throw new Error(data.message || "支付服务暂时不可用，请稍后重试");
+        if (!res.ok) throw new Error(data.message);
         if (!isPaymentOrderId(data.outTradeNo)) throw new Error("订单信息不完整，请重试");
         setOrderId(data.outTradeNo);
         safeStorage("set", key, data.outTradeNo);
