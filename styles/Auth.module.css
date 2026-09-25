@@ -162,6 +162,17 @@
   border: 1px solid #fecaca;
 }
 
+.notice {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  text-align: center;
+  background: var(--success-soft);
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
 @media (max-width: 480px) {
   .card {
     padding: 28px 20px;

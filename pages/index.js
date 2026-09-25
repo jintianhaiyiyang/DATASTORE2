@@ -120,12 +120,12 @@ export default function HomePage() {
             </p>
             <div className={styles.stats}>
               <div className={styles.stat}>
-                <strong>{datasets.length}</strong>
+                <strong>{loading ? "–" : datasets.length}</strong>
                 <span>数据集</span>
               </div>
               <div className={styles.statDivider} />
               <div className={styles.stat}>
-                <strong>{articles.length}</strong>
+                <strong>{loading ? "–" : articles.length}</strong>
                 <span>文章</span>
               </div>
             </div>
@@ -188,7 +188,7 @@ export default function HomePage() {
                 {filteredDatasets.map((d) => {
                   const price = formatPrice(d.price);
                   return (
-                    <Link href={`/dataset/${d.id}`} key={d.id} className={styles.card}>
+                    <Link href={`/dataset/${encodeURIComponent(d.id)}`} key={d.id} className={styles.card}>
                       <div className={styles.cardTop}>
                         <span className={`${styles.badge} ${styles.badgeData}`}>数据集</span>
                       </div>
@@ -218,7 +218,7 @@ export default function HomePage() {
               </div>
               <div className={styles.grid}>
                 {filteredArticles.map((a) => (
-                  <Link href={`/article/${a.id}`} key={a.id} className={styles.card}>
+                  <Link href={`/article/${encodeURIComponent(a.id)}`} key={a.id} className={styles.card}>
                     <div className={styles.cardTop}>
                       <span className={`${styles.badge} ${styles.badgeArticle}`}>文章</span>
                       <span className={styles.meta}>
@@ -230,7 +230,9 @@ export default function HomePage() {
                     <h3 className={styles.cardTitle}>{a.title}</h3>
                     <p className={styles.cardDesc}>{a.summary || "暂无摘要"}</p>
                     <div className={styles.cardFooter}>
-                      <span className={styles.meta}>阅读</span>
+                      <span className={styles.meta}>
+                        {Array.isArray(a.tags) ? a.tags.slice(0, 2).join(" · ") : ""}
+                      </span>
                       <span className={styles.action}>阅读全文</span>
                     </div>
                   </Link>

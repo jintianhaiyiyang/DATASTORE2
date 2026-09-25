@@ -12,7 +12,7 @@
 - 微信 Native、H5、JSAPI 支付
 - 免费资源直接下载，付费资源在确认付款后解锁
 - 富文本白名单净化，危险脚本、事件属性和 URL 会被移除
-- 登录、验证码、下单和查单接口的 Redis 限流
+- 登录、验证码发送与校验、下单和查单接口的 Redis 限流（验证码错误次数记录在服务端，重放旧 Cookie 无法重置）
 - CSP、HSTS（生产环境）、防点击劫持等安全响应头
 
 ## 技术要求
@@ -197,7 +197,7 @@ SDK 返回格式参考：[H5](https://github.com/klover2/wechatpay-node-v3-ts/bl
 | `GET/PUT/DELETE /api/datasets/:id` | 读取公开，写入管理员 | 数据集详情与维护 |
 | `GET/PUT /api/site` | 读取公开，写入管理员 | 站点设置 |
 | `POST /api/auth/send-otp` | 公开、限流 | 发送验证码 |
-| `POST /api/auth/register` | 公开 | 注册并登录 |
+| `POST /api/auth/register` | 公开、限流 | 注册并登录 |
 | `POST /api/auth/login` | 公开、限流 | 用户或管理员登录 |
 | `POST /api/auth/logout` | 当前 Session | 退出 |
 | `POST /api/checkout` | 登录用户、限流 | 创建微信订单 |

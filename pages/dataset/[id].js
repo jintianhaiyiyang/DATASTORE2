@@ -44,9 +44,12 @@ function DatasetContent({ id }) {
   if (loading) return <Layout title="加载中"><div className={styles.loadingBox} role="status">正在获取资源详情…</div></Layout>;
   if (!dataset) return (
     <Layout title="资源暂不可用"><div className={styles.emptyBox}>
+      <h1 className={styles.emptyTitle}>资源暂不可用</h1>
       <p role="alert">{error || "资源不存在"}</p>
-      <button type="button" className={styles.checkBtn} onClick={() => { setLoading(true); setRetry((n) => n + 1); }}>重新加载</button>
-      <Link href="/" className={styles.backLink}>返回市集</Link>
+      <div className={styles.emptyActions}>
+        <button type="button" className={styles.checkBtn} onClick={() => { setLoading(true); setRetry((n) => n + 1); }}>重新加载</button>
+        <Link href="/" className={styles.backLink}>← 返回市集</Link>
+      </div>
     </div></Layout>
   );
   const tags = Array.isArray(dataset.tags) ? dataset.tags.filter(Boolean) : [];

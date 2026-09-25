@@ -1,7 +1,11 @@
 import { withIronSessionApiRoute } from "../../../lib/session";
 import { saveUser } from "../../../lib/db";
 import bcrypt from "bcryptjs";
+import { consumeRateLimit } from "../../../lib/rateLimit";
 import {
+  constantTimeEqual,
+  getClientIp,
+  hashKey,
   isValidEmail,
   normalizeEmail,
   requireSameOrigin,
@@ -23,26 +27,42 @@ async function registerHandler(req, res) {
     return res.status(400).json({ message: "请输入有效的邮箱地址" });
   }
 
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: "密码长度应为 8–128 位" });
+  }
+
+  const ipRate = await consumeRateLimit(`rate:register:ip:${hashKey(getClientIp(req))}`, {
+    limit: 20,
+    windowSeconds: 15 * 60,
+  });
+  if (!ipRate.allowed) {
+    res.setHeader("Retry-After", String(ipRate.retryAfter));
+    return res.status(429).json({ message: "尝试次数过多，请稍后再试" });
+  }
+
   const sessionOtp = req.session.otp;
   const now = Date.now();
   if (!sessionOtp || sessionOtp.email !== email || sessionOtp.expires < now) {
     return res.status(400).json({ message: "验证码错误或已过期" });
   }
 
-  if (sessionOtp.attempts >= 5) {
+  // The attempt counter inside the cookie can be reset by replaying an older
+  // cookie, so the real limit is kept server-side. `expires` is fixed when the
+  // code is issued, which scopes the counter to this one code.
+  const otpRate = await consumeRateLimit(
+    `rate:register:otp:${hashKey(`${email}:${sessionOtp.expires}`)}`,
+    { limit: 5, windowSeconds: 10 * 60 }
+  );
+  if (sessionOtp.attempts >= 5 || !otpRate.allowed) {
     req.session.otp = null;
     await req.session.save();
     return res.status(429).json({ message: "尝试次数过多，请重新获取验证码" });
   }
 
-  if (sessionOtp.code !== otp) {
+  if (!/^\d{6}$/.test(otp) || !constantTimeEqual(sessionOtp.code, otp)) {
     req.session.otp = { ...sessionOtp, attempts: (sessionOtp.attempts || 0) + 1 };
     await req.session.save();
     return res.status(400).json({ message: "验证码错误或已过期" });
-  }
-
-  if (password.length < 8 || password.length > 128) {
-    return res.status(400).json({ message: "密码长度应为 8–128 位" });
   }
 
   try {

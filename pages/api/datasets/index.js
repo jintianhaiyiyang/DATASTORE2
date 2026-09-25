@@ -103,7 +103,6 @@ async function handler(req, res) {
       downloadUrl: safeLink,
       tags: cleanTags(tags),
       createdAt: new Date().toISOString(),
-      publisher: sessionUser.email || sessionUser.username || "admin",
     };
 
     try {

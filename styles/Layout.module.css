@@ -177,6 +177,9 @@
   .navRight { display: none; position: absolute; top: 100%; left: 0; right: 0; padding: 16px; background: var(--bg-surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-md); max-height: calc(100dvh - var(--nav-height)); overflow: auto; }
   .navOpen { display: flex; align-items: stretch; flex-direction: column; gap: 8px; }
   .navOpen .userChip { display: block; max-width: 100%; }
+  .navOpen .navLink, .navOpen .aboutPill, .navOpen .logoutBtn, .navOpen .loginBtn { padding: 10px 14px; font-size: 15px; }
+  .navOpen .loginBtn { justify-content: center; }
+  .navOpen .userChip { padding: 10px 14px; border-radius: 8px; font-size: 14px; }
   .navInner .brandText { max-width: none; }
   .aboutPill { border-radius: 8px; }
 }

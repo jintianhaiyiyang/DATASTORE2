@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import Image from "next/image";
 import { useRouter } from "next/router";
@@ -14,10 +14,12 @@ export default function AdminPage() {
 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginMsg, setLoginMsg] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const [articles, setArticles] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [siteSettings, setSiteSettings] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
   const [editingArticle, setEditingArticle] = useState(null);
   const [editingDataset, setEditingDataset] = useState(null);
@@ -29,17 +31,20 @@ export default function AdminPage() {
         fetch("/api/datasets"),
         fetch("/api/site"),
       ]);
-      const artData = await artRes.json();
-      const datData = await datRes.json();
-      const siteData = await siteRes.json();
+      const [artData, datData, siteData] = await Promise.all(
+        [artRes, datRes, siteRes].map((res) => (res.ok ? res.json() : null))
+      );
       if (Array.isArray(artData)) setArticles(artData);
       if (Array.isArray(datData)) setDatasets(datData);
-      if (siteData && typeof siteData === "object") {
+      // An error body such as { message } must not replace the saved settings.
+      if (siteData && typeof siteData === "object" && typeof siteData.siteTitle === "string") {
         setSiteSettings(siteData);
         updateSiteSettingsCache(siteData);
       }
+      setLoadError(artRes.ok && datRes.ok && siteRes.ok ? "" : "部分内容加载失败，请刷新页面重试");
     } catch (e) {
       console.error("fetch error", e);
+      setLoadError("网络异常，内容加载失败，请刷新页面重试");
     }
   }
 
@@ -66,24 +71,25 @@ export default function AdminPage() {
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setLoginMsg("验证中...");
+    if (loggingIn) return;
+    setLoggingIn(true);
+    setLoginMsg("");
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginForm),
       });
-      const data = await res.json();
-      if (res.ok && data.success) router.reload();
-      else setLoginMsg(data.message || "账号或密码错误");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.isAdmin) {
+        router.reload();
+        return;
+      }
+      setLoginMsg(res.ok ? "权限不足：需要管理员账号" : data.message || "账号或密码错误");
     } catch {
       setLoginMsg("网络请求异常");
     }
-  };
-
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    await router.push("/");
+    setLoggingIn(false);
   };
 
   if (checkingAuth) {
@@ -101,13 +107,17 @@ export default function AdminPage() {
           <div className={styles.loginCard}>
             <h1 className={styles.loginTitle}>管理员登录</h1>
             <p className={styles.loginHint}>仅限管理员账号访问后台</p>
-            {loginMsg && <div className={styles.alert}>{loginMsg}</div>}
-            <form onSubmit={handleLoginSubmit}>
-              <div className={styles.field} style={{ marginBottom: 14 }}>
-                <label className={styles.label}>账号</label>
+            {loginMsg && <div className={styles.alert} role="alert">{loginMsg}</div>}
+            <form onSubmit={handleLoginSubmit} className={styles.loginForm}>
+              <div className={styles.field}>
+                <label htmlFor="admin-username" className={styles.label}>账号</label>
                 <input
+                  id="admin-username"
                   className={styles.input}
                   placeholder="管理员账号"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={loginForm.username}
                   onChange={(e) =>
                     setLoginForm({ ...loginForm, username: e.target.value })
@@ -115,11 +125,13 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <div className={styles.field} style={{ marginBottom: 18 }}>
-                <label className={styles.label}>密码</label>
+              <div className={styles.field}>
+                <label htmlFor="admin-password" className={styles.label}>密码</label>
                 <input
+                  id="admin-password"
                   className={styles.input}
                   type="password"
+                  autoComplete="current-password"
                   placeholder="密码"
                   value={loginForm.password}
                   onChange={(e) =>
@@ -128,8 +140,8 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <button type="submit" className={styles.primaryBtnBlock}>
-                进入后台
+              <button type="submit" className={styles.primaryBtnBlock} disabled={loggingIn}>
+                {loggingIn ? "验证中…" : "进入后台"}
               </button>
             </form>
           </div>
@@ -143,18 +155,19 @@ export default function AdminPage() {
       <div className={styles.page}>
         <div className={styles.card}>
           <div className={styles.header}>
-            <h1 className={styles.title}>内容管理</h1>
-            <div className={styles.userInfo}>
-              <span>{user?.username}</span>
-              <button type="button" onClick={handleLogout} className={styles.logoutBtn}>
-                退出
-              </button>
+            <div>
+              <h1 className={styles.title}>内容管理</h1>
+              <p className={styles.subtitle}>
+                当前账号：{user?.username} · 共 {datasets.length} 个数据集、{articles.length} 篇文章
+              </p>
             </div>
           </div>
+          {loadError && <p className={styles.msgErr} role="alert">{loadError}</p>}
 
           <div className={styles.tabs}>
             <button
               type="button"
+              aria-pressed={tab === "dataset"}
               className={`${styles.tabBtn} ${tab === "dataset" ? styles.tabActive : ""}`}
               onClick={() => setTab("dataset")}
             >
@@ -162,6 +175,7 @@ export default function AdminPage() {
             </button>
             <button
               type="button"
+              aria-pressed={tab === "article"}
               className={`${styles.tabBtn} ${tab === "article" ? styles.tabActive : ""}`}
               onClick={() => setTab("article")}
             >
@@ -169,6 +183,7 @@ export default function AdminPage() {
             </button>
             <button
               type="button"
+              aria-pressed={tab === "site"}
               className={`${styles.tabBtn} ${tab === "site" ? styles.tabActive : ""}`}
               onClick={() => setTab("site")}
             >
@@ -193,7 +208,6 @@ export default function AdminPage() {
           ) : (
             siteSettings ? (
               <SiteSettingsSection
-                key={siteSettings.updatedAt || siteSettings.siteTitle}
                 siteSettings={siteSettings}
                 setSiteSettings={setSiteSettings}
               />
@@ -207,6 +221,58 @@ export default function AdminPage() {
   );
 }
 
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+function formatPrice(price) {
+  const n = Number(price);
+  return !Number.isFinite(n) || n === 0 ? "免费" : `¥${n.toFixed(2)}`;
+}
+
+function formatDate(value) {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("zh-CN") : "";
+}
+
+function splitTags(value) {
+  return value.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+}
+
+function Field({ label, hint, full = false, children }) {
+  const id = useId();
+  return (
+    <div className={`${styles.field} ${full ? styles.full : ""}`}>
+      <label htmlFor={id} className={styles.label}>{label}</label>
+      {children(id)}
+      {hint && <p className={styles.hint}>{hint}</p>}
+    </div>
+  );
+}
+
+// Success notices live above the forms, which remount after each save.
+function useNotice() {
+  const [notice, setNotice] = useState("");
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const flash = useCallback((text) => {
+    clearTimeout(timer.current);
+    setNotice(text);
+    timer.current = setTimeout(() => setNotice(""), 3000);
+  }, []);
+  return [notice, flash];
+}
+
+function Notice({ text }) {
+  return (
+    <p className={styles.msgOk} role="status" hidden={!text}>
+      {text}
+    </p>
+  );
+}
+
+function FormError({ msg }) {
+  return msg ? <p className={styles.msgErr} role="alert">{msg}</p> : null;
+}
+
 function SiteSettingsSection({ siteSettings, setSiteSettings }) {
   const [form, setForm] = useState(() => ({
     siteTitle: siteSettings?.siteTitle || "",
@@ -215,214 +281,180 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
     footerText: siteSettings?.footerText || "",
     aboutContent: siteSettings?.aboutContent || "",
   }));
-  const [logoPreview, setLogoPreview] = useState(() => siteSettings?.logoUrl || "");
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [notice, flash] = useNotice();
+  // Only preview values the server would accept; next/image throws on others.
+  const logoPreview = /^(https:\/\/|data:image\/)/i.test(form.logoUrl) ? form.logoUrl : "";
 
   const handleFileChange = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setMsg("仅支持图片格式");
+    if (!LOGO_TYPES.includes(file.type)) {
+      setMsg("仅支持 PNG、JPG、GIF 或 WebP 图片");
       return;
     }
     if (file.size > 200 * 1024) {
-      setMsg("图片过大，建议小于 200KB");
+      setMsg("图片过大，请使用 200KB 以内的图片");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result;
-      setForm((prev) => ({ ...prev, logoUrl: dataUrl }));
-      setLogoPreview(dataUrl);
+      setForm((prev) => ({ ...prev, logoUrl: String(reader.result || "") }));
+      setMsg("");
     };
     reader.readAsDataURL(file);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
-    setMsg("保存中...");
+    if (saving) return;
+    setSaving(true);
+    setMsg("");
     try {
       const res = await fetch("/api/site", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteTitle: form.siteTitle,
-          pageTitle: form.pageTitle,
-          logoUrl: form.logoUrl,
-          footerText: form.footerText,
-          aboutContent: form.aboutContent,
-        }),
+        body: JSON.stringify(form),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setSiteSettings(data);
         updateSiteSettingsCache(data);
-        setMsg("success");
-        setTimeout(() => setMsg(""), 1000);
+        flash("站点设置已保存");
       } else {
         setMsg(data.message || "保存失败");
       }
     } catch {
-      setMsg("网络错误");
+      setMsg("网络错误，请重试");
+    } finally {
+      setSaving(false);
     }
   };
+
+  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
     <form onSubmit={handleSave}>
       <h2 className={styles.sectionTitle}>站点外观</h2>
       <div className={styles.formGrid}>
-        <div className={styles.field}>
-          <label className={styles.label}>站点标题</label>
-          <input
-            className={styles.input}
-            value={form.siteTitle}
-            onChange={(e) => setForm({ ...form, siteTitle: e.target.value })}
-            placeholder="例如：DATA STORE"
-            required
-          />
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>标签页标题</label>
-          <input
-            className={styles.input}
-            value={form.pageTitle}
-            onChange={(e) => setForm({ ...form, pageTitle: e.target.value })}
-            placeholder="例如：DataStore - 数据小商店"
-          />
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Logo 链接（可选）</label>
-          <input
-            className={styles.input}
-            value={form.logoUrl}
-            onChange={(e) => {
-              setForm({ ...form, logoUrl: e.target.value });
-              setLogoPreview(e.target.value);
-            }}
-            placeholder="https://..."
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>上传 Logo（建议 200KB 以内）</label>
-          <input
-            className={styles.input}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>页脚文案</label>
-          <input
-            className={styles.input}
-            value={form.footerText}
-            onChange={(e) => setForm({ ...form, footerText: e.target.value })}
-            placeholder="例如：© 2026 数据小商店 DataStore Inc."
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>关于我们（HTML）</label>
-          <textarea
-            className={styles.textarea}
-            value={form.aboutContent}
-            onChange={(e) => setForm({ ...form, aboutContent: e.target.value })}
-            placeholder="介绍你的产品、服务或团队"
-          />
-        </div>
+        <Field label="站点标题">
+          {(id) => <input id={id} className={styles.input} value={form.siteTitle} onChange={set("siteTitle")}
+            placeholder="例如：DATA STORE" maxLength={60} required />}
+        </Field>
+        <Field label="浏览器标签页标题">
+          {(id) => <input id={id} className={styles.input} value={form.pageTitle} onChange={set("pageTitle")}
+            placeholder="例如：DataStore - 数据小商店" maxLength={120} />}
+        </Field>
+        <Field label="Logo" hint="填写 HTTPS 图片地址，或上传 200KB 以内的 PNG / JPG / GIF / WebP 图片" full>
+          {(id) => (
+            <div className={styles.logoRow}>
+              <div className={styles.previewBox} aria-hidden={!logoPreview}>
+                {logoPreview ? (
+                  <Image src={logoPreview} alt="Logo 预览" className={styles.previewImg} width={56} height={56} unoptimized />
+                ) : (
+                  <span className={styles.previewEmpty}>无</span>
+                )}
+              </div>
+              <input id={id} className={styles.input} value={form.logoUrl.startsWith("data:") ? "（已上传图片）" : form.logoUrl}
+                readOnly={form.logoUrl.startsWith("data:")} onChange={set("logoUrl")} placeholder="https://…" />
+              <label className={styles.secondaryBtn}>
+                上传
+                <input type="file" accept={LOGO_TYPES.join(",")} onChange={handleFileChange} className={styles.visuallyHidden} />
+              </label>
+              {form.logoUrl && (
+                <button type="button" className={styles.secondaryBtn} onClick={() => setForm((prev) => ({ ...prev, logoUrl: "" }))}>
+                  清除
+                </button>
+              )}
+            </div>
+          )}
+        </Field>
+        <Field label="页脚文案" full>
+          {(id) => <input id={id} className={styles.input} value={form.footerText} onChange={set("footerText")}
+            placeholder="例如：© 2026 数据小商店 DataStore" maxLength={200} />}
+        </Field>
+        <Field label="关于我们（HTML）" hint="留空则不显示“关于我们”。脚本、事件属性等不安全内容会被自动移除。" full>
+          {(id) => <textarea id={id} className={styles.textarea} value={form.aboutContent} onChange={set("aboutContent")}
+            placeholder="<p>介绍你的产品、服务或团队</p>" />}
+        </Field>
       </div>
 
       <div className={styles.btnRow}>
-        <button type="submit" className={styles.primaryBtn}>
-          保存设置
-        </button>
-        <button
-          type="button"
-          className={styles.secondaryBtn}
-          onClick={() => {
-            setForm({ ...form, logoUrl: "" });
-            setLogoPreview("");
-          }}
-        >
-          清除 Logo
+        <button type="submit" className={styles.primaryBtn} disabled={saving}>
+          {saving ? "保存中…" : "保存设置"}
         </button>
       </div>
-
-      {logoPreview && (
-        <div className={styles.previewBox}>
-          <Image
-            src={logoPreview}
-            alt="Logo 预览"
-            className={styles.previewImg}
-            width={96}
-            height={96}
-            unoptimized
-          />
-        </div>
-      )}
-
-      {msg && (
-        <p className={msg === "success" ? styles.msgOk : styles.msgErr}>
-          {msg === "success" ? "保存成功" : msg}
-        </p>
-      )}
+      <FormError msg={msg} />
+      <Notice text={notice} />
     </form>
   );
 }
 
+function ItemList({ title, emptyText, items, editingId, getTitle, getMeta, viewHref, deleteUrl, onEdit, onDeleted }) {
+  return (
+    <div className={styles.listBlock}>
+      <h3 className={styles.listTitle}>{title}（{items.length}）</h3>
+      {items.length === 0 ? (
+        <p className={styles.emptyText}>{emptyText}</p>
+      ) : (
+        <ul className={styles.itemList}>
+          {items.map((item) => (
+            <li key={item.id} className={`${styles.item} ${editingId === item.id ? styles.itemEditing : ""}`}>
+              <div className={styles.itemMain}>
+                <span className={styles.itemTitle}>{getTitle(item)}</span>
+                <span className={styles.itemMeta}>{getMeta(item)}</span>
+              </div>
+              <div className={styles.itemActions}>
+                <a href={viewHref(item)} target="_blank" rel="noopener noreferrer" className={styles.viewBtn}>查看</a>
+                <button type="button" className={styles.editBtn} onClick={() => {
+                  onEdit(item);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}>
+                  编辑
+                </button>
+                <DeleteBtn url={deleteUrl(item)} label={getTitle(item)} onDeleted={() => onDeleted(item)} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function DatasetAdminSection({ datasets, editingDataset, setEditingDataset, refresh }) {
+  const [notice, flash] = useNotice();
   return (
     <>
       <DatasetForm
         key={editingDataset ? editingDataset.id : "new"}
         editingDataset={editingDataset}
-        onSaved={async () => {
+        onSaved={async (text) => {
           await refresh();
           setEditingDataset(null);
+          flash(text);
         }}
         onCancel={() => setEditingDataset(null)}
       />
-
-      <div className={styles.listBlock}>
-        <h3 className={styles.listTitle}>已发布数据集（{datasets.length}）</h3>
-        {datasets.length === 0 ? (
-          <p className={styles.emptyText}>暂无数据</p>
-        ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>名称</th>
-                  <th>价格</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datasets.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.id}</td>
-                    <td>{d.name}</td>
-                    <td>¥{d.price}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className={styles.editBtn}
-                        onClick={() => {
-                          setEditingDataset(d);
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                      >
-                        编辑
-                      </button>
-                      <DeleteBtn url={`/api/datasets/${d.id}`} onDeleted={refresh} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <Notice text={notice} />
+      <ItemList
+        title="已发布数据集"
+        emptyText="还没有数据集，使用上方表单发布第一个。"
+        items={datasets}
+        editingId={editingDataset?.id}
+        getTitle={(d) => d.name}
+        getMeta={(d) => [formatPrice(d.price), formatDate(d.createdAt), ...(d.tags || [])].filter(Boolean).join(" · ")}
+        viewHref={(d) => `/dataset/${encodeURIComponent(d.id)}`}
+        deleteUrl={(d) => `/api/datasets/${encodeURIComponent(d.id)}`}
+        onEdit={setEditingDataset}
+        onDeleted={async (d) => {
+          if (editingDataset?.id === d.id) setEditingDataset(null);
+          await refresh();
+          flash("已删除");
+        }}
+      />
     </>
   );
 }
@@ -435,174 +467,116 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
     richContent: editingDataset?.richContent || "",
     price: editingDataset?.price ?? "",
     baiduLink: editingDataset?.baiduLink || editingDataset?.downloadUrl || "",
-    tags: editingDataset?.tags ? editingDataset.tags.join(",") : "",
+    tags: Array.isArray(editingDataset?.tags) ? editingDataset.tags.join(", ") : "",
   });
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setMsg("提交中...");
+    if (saving) return;
+    setSaving(true);
+    setMsg("");
     try {
-      const url = isEdit ? `/api/datasets/${editingDataset.id}` : "/api/datasets";
-      const method = isEdit ? "PUT" : "POST";
-
+      const url = isEdit ? `/api/datasets/${encodeURIComponent(editingDataset.id)}` : "/api/datasets";
       const res = await fetch(url, {
-        method,
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
           price: Number(form.price || 0),
-          tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+          tags: splitTags(form.tags),
         }),
       });
-      if (res.ok) {
-        setMsg("success");
-        if (!isEdit) {
-          setForm({
-            name: "",
-            description: "",
-            richContent: "",
-            price: "",
-            baiduLink: "",
-            tags: "",
-          });
-        }
-        setTimeout(() => {
-          setMsg("");
-          onSaved();
-        }, 800);
-      } else {
+      if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setMsg(data.message || "发布失败");
+        setMsg(data.message || "保存失败");
+        setSaving(false);
+        return;
       }
+      if (!isEdit) setForm({ name: "", description: "", richContent: "", price: "", baiduLink: "", tags: "" });
+      await onSaved(isEdit ? "修改已保存" : "数据集已发布");
     } catch {
-      setMsg("网络错误");
+      setMsg("网络错误，请重试");
     }
+    setSaving(false);
   };
 
   return (
     <form onSubmit={onSubmit}>
       <h2 className={styles.sectionTitle}>
-        {isEdit ? `编辑：${editingDataset.name}` : "发布数据集"}
+        {isEdit ? `编辑数据集：${editingDataset.name}` : "发布数据集"}
       </h2>
       <div className={styles.formGrid}>
-        <div className={styles.field}>
-          <label className={styles.label}>名称</label>
-          <input
-            className={styles.input}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>价格（元）</label>
-          <input
-            className={styles.input}
-            type="number"
-            step="0.01"
-            value={form.price}
-            onChange={(e) => setForm({ ...form, price: e.target.value })}
-            required
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>简述</label>
-          <input
-            className={styles.input}
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            required
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>图文详情（HTML）</label>
-          <textarea
-            className={styles.textarea}
-            value={form.richContent}
-            onChange={(e) => setForm({ ...form, richContent: e.target.value })}
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>网盘 / 下载链接</label>
-          <input
-            className={styles.input}
-            value={form.baiduLink}
-            onChange={(e) => setForm({ ...form, baiduLink: e.target.value })}
-            required
-          />
-        </div>
+        <Field label="名称">
+          {(id) => <input id={id} className={styles.input} value={form.name} onChange={set("name")} maxLength={120} required />}
+        </Field>
+        <Field label="价格（元）" hint="填 0 表示免费资源">
+          {(id) => <input id={id} className={styles.input} type="number" inputMode="decimal" min="0" max="1000000" step="0.01"
+            value={form.price} onChange={set("price")} placeholder="例如：29.90" required />}
+        </Field>
+        <Field label="简述" hint="显示在首页卡片上，最多 1000 字" full>
+          {(id) => <input id={id} className={styles.input} value={form.description} onChange={set("description")} maxLength={1000} required />}
+        </Field>
+        <Field label="图文详情（HTML，可选）" hint="支持段落、标题、列表、表格、图片和链接；脚本与事件属性会被自动移除" full>
+          {(id) => <textarea id={id} className={styles.textarea} value={form.richContent} onChange={set("richContent")}
+            placeholder="<p>数据来源、字段说明、更新频率…</p>" />}
+        </Field>
+        <Field label="网盘 / 下载链接" hint="仅向已购买用户展示，必须是 HTTPS 地址">
+          {(id) => <input id={id} className={styles.input} type="url" inputMode="url" value={form.baiduLink} onChange={set("baiduLink")}
+            placeholder="https://pan.baidu.com/s/…" required />}
+        </Field>
+        <Field label="标签（逗号分隔，可选）">
+          {(id) => <input id={id} className={styles.input} value={form.tags} onChange={set("tags")} placeholder="例如：人口, 宏观经济" />}
+        </Field>
       </div>
       <div className={styles.btnRow}>
-        <button type="submit" className={styles.primaryBtn}>
-          {isEdit ? "保存修改" : "立即发布"}
+        <button type="submit" className={styles.primaryBtn} disabled={saving}>
+          {saving ? "提交中…" : isEdit ? "保存修改" : "立即发布"}
         </button>
         {isEdit && (
           <button type="button" onClick={onCancel} className={styles.secondaryBtn}>
-            取消
+            取消编辑
           </button>
         )}
       </div>
-      {msg && (
-        <p className={msg === "success" ? styles.msgOk : styles.msgErr}>
-          {msg === "success" ? "操作成功" : msg}
-        </p>
-      )}
+      <FormError msg={msg} />
     </form>
   );
 }
 
 function ArticleAdminSection({ articles, editingArticle, setEditingArticle, refresh }) {
+  const [notice, flash] = useNotice();
   return (
     <>
       <ArticleForm
         key={editingArticle ? editingArticle.id : "new"}
         editingArticle={editingArticle}
-        onSaved={async () => {
+        onSaved={async (text) => {
           await refresh();
           setEditingArticle(null);
+          flash(text);
         }}
         onCancel={() => setEditingArticle(null)}
       />
-      <div className={styles.listBlock}>
-        <h3 className={styles.listTitle}>已发布文章（{articles.length}）</h3>
-        {articles.length === 0 ? (
-          <p className={styles.emptyText}>暂无文章</p>
-        ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>标题</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {articles.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.id}</td>
-                    <td>{a.title}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className={styles.editBtn}
-                        onClick={() => {
-                          setEditingArticle(a);
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                      >
-                        编辑
-                      </button>
-                      <DeleteBtn url={`/api/articles/${a.id}`} onDeleted={refresh} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <Notice text={notice} />
+      <ItemList
+        title="已发布文章"
+        emptyText="还没有文章，使用上方表单发布第一篇。"
+        items={articles}
+        editingId={editingArticle?.id}
+        getTitle={(a) => a.title}
+        getMeta={(a) => [formatDate(a.createdAt), ...(a.tags || [])].filter(Boolean).join(" · ")}
+        viewHref={(a) => `/article/${encodeURIComponent(a.id)}`}
+        deleteUrl={(a) => `/api/articles/${encodeURIComponent(a.id)}`}
+        onEdit={setEditingArticle}
+        onDeleted={async (a) => {
+          if (editingArticle?.id === a.id) setEditingArticle(null);
+          await refresh();
+          flash("已删除");
+        }}
+      />
     </>
   );
 }
@@ -613,113 +587,93 @@ function ArticleForm({ editingArticle, onSaved, onCancel }) {
     title: editingArticle?.title || "",
     summary: editingArticle?.summary || "",
     content: editingArticle?.content || "",
-    tags: editingArticle?.tags ? editingArticle.tags.join(",") : "",
+    tags: Array.isArray(editingArticle?.tags) ? editingArticle.tags.join(", ") : "",
   });
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setMsg("提交中...");
+    if (saving) return;
+    setSaving(true);
+    setMsg("");
     try {
-      const url = isEdit ? `/api/articles/${editingArticle.id}` : "/api/articles";
-      const method = isEdit ? "PUT" : "POST";
+      const url = isEdit ? `/api/articles/${encodeURIComponent(editingArticle.id)}` : "/api/articles";
       const res = await fetch(url, {
-        method,
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-        }),
+        body: JSON.stringify({ ...form, tags: splitTags(form.tags) }),
       });
-      if (res.ok) {
-        setMsg("success");
-        if (!isEdit) setForm({ title: "", summary: "", content: "", tags: "" });
-        setTimeout(() => {
-          setMsg("");
-          onSaved();
-        }, 800);
-      } else {
+      if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setMsg(data.message || "失败");
+        setMsg(data.message || "保存失败");
+        setSaving(false);
+        return;
       }
+      if (!isEdit) setForm({ title: "", summary: "", content: "", tags: "" });
+      await onSaved(isEdit ? "修改已保存" : "文章已发布");
     } catch {
-      setMsg("失败");
+      setMsg("网络错误，请重试");
     }
+    setSaving(false);
   };
 
   return (
     <form onSubmit={onSubmit}>
-      <h2 className={styles.sectionTitle}>{isEdit ? "编辑文章" : "发布文章"}</h2>
+      <h2 className={styles.sectionTitle}>{isEdit ? `编辑文章：${editingArticle.title}` : "发布文章"}</h2>
       <div className={styles.formGrid}>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>标题</label>
-          <input
-            className={styles.input}
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            required
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>摘要</label>
-          <input
-            className={styles.input}
-            value={form.summary}
-            onChange={(e) => setForm({ ...form, summary: e.target.value })}
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>内容（HTML）</label>
-          <textarea
-            className={styles.textarea}
-            value={form.content}
-            onChange={(e) => setForm({ ...form, content: e.target.value })}
-            required
-          />
-        </div>
-        <div className={`${styles.field} ${styles.full}`}>
-          <label className={styles.label}>标签（逗号分隔）</label>
-          <input
-            className={styles.input}
-            value={form.tags}
-            onChange={(e) => setForm({ ...form, tags: e.target.value })}
-            placeholder="例如：教程, 数据"
-          />
-        </div>
+        <Field label="标题" full>
+          {(id) => <input id={id} className={styles.input} value={form.title} onChange={set("title")} maxLength={120} required />}
+        </Field>
+        <Field label="摘要（可选）" hint="显示在首页卡片上，最多 500 字" full>
+          {(id) => <input id={id} className={styles.input} value={form.summary} onChange={set("summary")} maxLength={500} />}
+        </Field>
+        <Field label="正文（HTML）" hint="支持段落、标题、列表、引用、表格、图片和链接；脚本与事件属性会被自动移除" full>
+          {(id) => <textarea id={id} className={`${styles.textarea} ${styles.textareaTall}`} value={form.content}
+            onChange={set("content")} placeholder="<p>正文内容…</p>" required />}
+        </Field>
+        <Field label="标签（逗号分隔，可选）" full>
+          {(id) => <input id={id} className={styles.input} value={form.tags} onChange={set("tags")} placeholder="例如：教程, 数据" />}
+        </Field>
       </div>
       <div className={styles.btnRow}>
-        <button type="submit" className={styles.primaryBtn}>
-          {isEdit ? "保存修改" : "发布文章"}
+        <button type="submit" className={styles.primaryBtn} disabled={saving}>
+          {saving ? "提交中…" : isEdit ? "保存修改" : "发布文章"}
         </button>
         {isEdit && (
           <button type="button" onClick={onCancel} className={styles.secondaryBtn}>
-            取消
+            取消编辑
           </button>
         )}
       </div>
-      {msg && (
-        <p className={msg === "success" ? styles.msgOk : styles.msgErr}>
-          {msg === "success" ? "操作成功" : msg}
-        </p>
-      )}
+      <FormError msg={msg} />
     </form>
   );
 }
 
-function DeleteBtn({ url, onDeleted }) {
+function DeleteBtn({ url, label, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
   const handleDelete = async () => {
-    if (!confirm("确定要删除吗？此操作不可恢复。")) return;
+    if (deleting || !confirm(`确定要删除“${label}”吗？此操作不可恢复。`)) return;
+    setDeleting(true);
     try {
       const res = await fetch(url, { method: "DELETE" });
-      if (res.ok) onDeleted();
-      else alert("删除失败");
+      if (res.ok) {
+        await onDeleted();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.message || "删除失败，请重试");
+      }
     } catch {
-      alert("网络错误");
+      alert("网络错误，请重试");
+    } finally {
+      setDeleting(false);
     }
   };
   return (
-    <button type="button" className={styles.deleteBtn} onClick={handleDelete}>
-      删除
+    <button type="button" className={styles.deleteBtn} onClick={handleDelete} disabled={deleting}>
+      {deleting ? "删除中…" : "删除"}
     </button>
   );
 }

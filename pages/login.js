@@ -13,6 +13,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [message, setMessage] = useState("");
+  const [messageOk, setMessageOk] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
 
   useEffect(() => {
@@ -24,8 +25,9 @@ export default function AuthPage() {
   }, [countdown]);
 
   const sendOtp = async () => {
-    if (!email.includes("@")) {
-      setMessage("请输入正确邮箱");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setMessageOk(false);
+      setMessage("请输入正确的邮箱地址");
       return;
     }
 
@@ -38,13 +40,15 @@ export default function AuthPage() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json().catch(() => ({}));
+      setMessageOk(res.ok);
       if (res.ok) {
-        setMessage("验证码已发送，请检查邮箱");
+        setMessage("验证码已发送，请检查邮箱（含垃圾邮件箱）");
         setCountdown(60);
       } else {
         setMessage(data.message || "验证码发送失败");
       }
     } catch {
+      setMessageOk(false);
       setMessage("网络错误，请稍后重试");
     } finally {
       setSendingOtp(false);
@@ -55,11 +59,13 @@ export default function AuthPage() {
     e.preventDefault();
     if (loading) return;
     if (isRegister && password.length < 8) {
+      setMessageOk(false);
       setMessage("密码至少 8 位");
       return;
     }
     setLoading(true);
     setMessage("");
+    setMessageOk(false);
 
     const url = isRegister ? "/api/auth/register" : "/api/auth/login";
     const body = isRegister
@@ -100,7 +106,7 @@ export default function AuthPage() {
               : "登录后即可购买与管理资源"}
           </p>
           {message && (
-            <div className={styles.alert} role="status" aria-live="polite">
+            <div className={messageOk ? styles.notice : styles.alert} role={messageOk ? "status" : "alert"}>
               {message}
             </div>
           )}
@@ -139,7 +145,7 @@ export default function AuthPage() {
                     placeholder="6 位数字"
                     required
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                   />
                   <button
                     type="button"

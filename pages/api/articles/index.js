@@ -40,7 +40,6 @@ async function articlesHandler(req, res) {
         content: safeContent,
         tags: cleanTags(tags),
         createdAt: new Date().toISOString(),
-        author: user.username || "Admin",
       };
 
       await saveArticle(newArticle);

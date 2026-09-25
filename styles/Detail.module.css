@@ -107,6 +107,71 @@
   color: var(--primary);
 }
 
+/* Headings and blocks admins can use in dataset descriptions */
+.richContent h1,
+.richContent h2,
+.richContent h3,
+.richContent h4 {
+  color: var(--text-primary);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  margin: 1.4em 0 0.6em;
+}
+
+.richContent h1 { font-size: 1.4em; }
+.richContent h2 { font-size: 1.25em; }
+.richContent h3 { font-size: 1.1em; }
+.richContent h4 { font-size: 1em; }
+
+.richContent > :first-child,
+.articleBody > :first-child {
+  margin-top: 0;
+}
+
+.richContent > :last-child,
+.articleBody > :last-child {
+  margin-bottom: 0;
+}
+
+.richContent blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 14px;
+  margin: 1em 0;
+  color: var(--text-tertiary);
+}
+
+.richContent ul,
+.richContent ol {
+  margin-bottom: 1em;
+}
+
+.richContent li + li,
+.articleBody li + li {
+  margin-top: 0.3em;
+}
+
+.richContent hr,
+.articleBody hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.6em 0;
+}
+
+.richContent code,
+.articleBody code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--bg-muted);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.richContent pre code,
+.articleBody pre code {
+  padding: 0;
+  background: none;
+}
+
 .rightCol {
   position: sticky;
   top: calc(var(--nav-height) + 20px);
@@ -289,6 +354,32 @@
   color: var(--text-tertiary);
 }
 
+.emptyTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.emptyActions .backLink {
+  margin-bottom: 0;
+  min-height: 44px;
+}
+
+.emptyActions .checkBtn {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+}
+
 /* Article detail helpers (shared) */
 .articleShell {
   max-width: 760px;
@@ -384,11 +475,19 @@
   margin-bottom: 1.15em;
 }
 
-.articleBody h2 {
+.articleBody h1,
+.articleBody h2,
+.articleBody h3,
+.articleBody h4 {
   color: var(--text-primary);
+  line-height: 1.35;
   margin: 1.4em 0 0.6em;
-  font-size: 1.35em;
 }
+
+.articleBody h1 { font-size: 1.5em; }
+.articleBody h2 { font-size: 1.35em; }
+.articleBody h3 { font-size: 1.15em; }
+.articleBody h4 { font-size: 1em; }
 
 .articleBody a {
   color: var(--primary);

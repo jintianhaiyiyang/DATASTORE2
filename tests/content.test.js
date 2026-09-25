@@ -3,6 +3,8 @@ import {
   cleanTags,
   isHttpUrl,
   isSafeLogoUrl,
+  sanitizeArticle,
+  sanitizeDataset,
   sanitizeRichText,
 } from "../lib/content";
 
@@ -21,6 +23,11 @@ describe("content sanitization", () => {
         '<math><xmp></xmp><img src=x onerror="alert(2)"></math>'
     );
     expect(result).not.toMatch(/svg|math|textarea|xmp|onerror/i);
+  });
+
+  it("never serves the admin login name stored on legacy content", () => {
+    expect(sanitizeArticle({ id: "a1", title: "T", author: "site-admin" })).not.toHaveProperty("author");
+    expect(sanitizeDataset({ id: "d1", name: "D", publisher: "site-admin" })).not.toHaveProperty("publisher");
   });
 
   it("normalizes and bounds tags", () => {
