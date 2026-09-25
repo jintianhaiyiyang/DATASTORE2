@@ -246,12 +246,26 @@
   color: white;
 }
 
+.alipayBtn {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  background: #1463d8;
+  color: white;
+  transition: transform 0.12s, opacity 0.12s, background 0.12s;
+}
+
+.alipayBtn:hover,
 .wechatBtn:hover,
 .downloadBtn:hover {
   opacity: 0.92;
   transform: translateY(-1px);
 }
 
+.alipayBtn:disabled,
 .wechatBtn:disabled {
   opacity: 0.55;
   cursor: not-allowed;

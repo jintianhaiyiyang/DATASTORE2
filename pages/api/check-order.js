@@ -5,13 +5,37 @@ import {
   updateUserPurchase,
 } from "../../lib/db";
 import { createWxPay, unwrapWxResult } from "../../lib/wxpay";
+import { createAlipay, isAlipayPaidState, queryAlipayTrade, toClientTradeState } from "../../lib/alipay";
 import { consumeRateLimit } from "../../lib/rateLimit";
 import { hashKey } from "../../lib/security";
 import {
   isOrderOwner,
   parsePaymentAttach,
+  validateAlipayPaidOrder,
   validatePaidOrder,
 } from "../../lib/orderValidation";
+
+// Returns { paid, transactionId, state } or null when the provider's trade
+// does not match the local order.
+async function queryAlipay(order) {
+  const trade = await queryAlipayTrade(createAlipay(), order.id);
+  if (!isAlipayPaidState(trade.tradeStatus)) {
+    return { paid: false, state: toClientTradeState(trade.tradeStatus) };
+  }
+  if (!validateAlipayPaidOrder({ order, trade, expectedAppId: process.env.ALIPAY_APP_ID })) return null;
+  return { paid: true, transactionId: trade.tradeNo };
+}
+
+async function queryWechat(order) {
+  const data = unwrapWxResult(await createWxPay().query({ out_trade_no: order.id }));
+  if (data.trade_state !== "SUCCESS") {
+    return { paid: false, state: data.trade_state || null };
+  }
+  const attach = parsePaymentAttach(data.attach);
+  if (!validatePaidOrder({ order, payment: data, attach,
+    expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) return null;
+  return { paid: true, transactionId: data.transaction_id };
+}
 
 async function handler(req, res) {
   if (req.method !== "GET") {
@@ -49,27 +73,20 @@ async function handler(req, res) {
       return res.status(429).json({ paid: false, message: "查询过于频繁" });
     }
 
-    const wxpay = createWxPay();
-    const result = await wxpay.query({ out_trade_no: orderId });
-    const data = unwrapWxResult(result);
-    const tradeState = data.trade_state;
-
-    if (tradeState === "SUCCESS") {
-      const attach = parsePaymentAttach(data.attach);
-      if (!validatePaidOrder({ order, payment: data, attach,
-        expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) {
-        console.error("[查询订单] 支付平台订单数据与本地订单不一致", orderId);
-        return res.status(409).json({ paid: false, message: "订单数据校验失败" });
-      }
-
-      const granted = await updateUserPurchase(order.email, order.datasetId);
-      if (!granted) throw new Error("购买权限保存失败");
-      await markOrderPaid(orderId, data.transaction_id);
-
-      return res.status(200).json({ paid: true });
+    // Orders created before Alipay support are WeChat orders.
+    const result = order.provider === "alipay" ? await queryAlipay(order) : await queryWechat(order);
+    if (!result) {
+      console.error("[查询订单] 支付平台订单数据与本地订单不一致", orderId);
+      return res.status(409).json({ paid: false, message: "订单数据校验失败" });
+    }
+    if (!result.paid) {
+      return res.status(200).json({ paid: false, state: result.state });
     }
 
-    return res.status(200).json({ paid: false, state: tradeState || null });
+    const granted = await updateUserPurchase(order.email, order.datasetId);
+    if (!granted) throw new Error("购买权限保存失败");
+    await markOrderPaid(orderId, result.transactionId);
+    return res.status(200).json({ paid: true });
   } catch (error) {
     console.error("[查询报错] 接口异常:", error.message);
     return res.status(500).json({ paid: false, message: "订单查询失败" });

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/router";
 import { QRCodeSVG } from "qrcode.react";
-import { consumeWechatPayIntent, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getAlipayJumpUrl, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
+import { useSiteSettings } from "../lib/useSiteSettings";
 import styles from "../styles/Detail.module.css";
 
 const subscribe = () => () => {};
@@ -61,6 +62,8 @@ function PaymentDialog({ codeUrl, name, price, message, onClose, onCheck }) {
 
 export default function PaymentPanel({ dataset, user, onPaid }) {
   const router = useRouter();
+  const { payments } = useSiteSettings();
+  const methods = payments || { wechat: true, alipay: false };
   const clientType = useSyncExternalStore(subscribe, getPaymentClientType, () => "native");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -165,7 +168,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
     };
   }, [orderId, key, dataset.id, onPaid, checkVersion]);
 
-  const buy = useCallback(async (type) => {
+  const buy = useCallback(async (type, provider = "wechat") => {
     if (checkoutRequest.current) return;
     if (!user?.isLoggedIn) {
       await router.push(`/login?next=${encodeURIComponent(router.asPath)}`);
@@ -176,7 +179,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
     setBusy(true);
     setError("");
     try {
-      let data = payment?.type === (type === "native" ? "qrcode" : type) ? payment : null;
+      let data = provider === "wechat" && payment?.type === (type === "native" ? "qrcode" : type) ? payment : null;
       if (!data) {
         // The server may close the previous order while changing channels.
         // Never offer its cached QR code again if the next request fails.
@@ -184,7 +187,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         setShowQr(false);
         const res = await fetch("/api/checkout", {
           method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-          body: JSON.stringify({ datasetId: dataset.id, clientType: type, previousOrderId: orderId || undefined }),
+          body: JSON.stringify({ datasetId: dataset.id, provider, clientType: type, previousOrderId: orderId || undefined }),
         });
         data = await readCheckoutResponse(res);
         if (controller.signal.aborted) return;
@@ -205,11 +208,15 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         setOrderId(data.outTradeNo);
         safeStorage("set", key, data.outTradeNo);
         if (data.type === "h5") getH5JumpUrl(data.mwebUrl, window.location.href, data.outTradeNo);
+        if (data.type === "alipay") getAlipayJumpUrl(data.payUrl);
         if ((data.type === "qrcode" && !data.codeUrl) || (data.type === "jsapi" && !data.payParams) ||
-            !["qrcode", "h5", "jsapi"].includes(data.type)) throw new Error("支付参数不完整，请稍后重试");
+            !["qrcode", "h5", "jsapi", "alipay"].includes(data.type)) throw new Error("支付参数不完整，请稍后重试");
         setPayment(data);
       }
-      if (data.type === "qrcode" && data.codeUrl) {
+      if (data.type === "alipay") {
+        // Alipay returns to this page with payOrder so polling resumes.
+        window.location.assign(getAlipayJumpUrl(data.payUrl));
+      } else if (data.type === "qrcode" && data.codeUrl) {
         setShowQr(true);
       } else if (data.type === "h5" && data.mwebUrl) {
         window.location.assign(getH5JumpUrl(data.mwebUrl, window.location.href, data.outTradeNo));
@@ -229,14 +236,23 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
   }, [dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn]);
 
   useEffect(() => {
-    if (clientType !== "jsapi" || router.query.wechatPay !== "ready" || !user?.isLoggedIn) return;
+    if (!methods.wechat || clientType !== "jsapi" || router.query.wechatPay !== "ready" || !user?.isLoggedIn) return;
     // Defer until pending-order restoration has rendered. Strict Mode can
     // cancel this timer without consuming the one-time intent prematurely.
     const timer = setTimeout(() => {
       if (consumeWechatPayIntent(key)) void buy("jsapi");
     }, 0);
     return () => clearTimeout(timer);
-  }, [buy, clientType, key, router.query.wechatPay, user?.isLoggedIn]);
+  }, [buy, clientType, key, methods.wechat, router.query.wechatPay, user?.isLoggedIn]);
+
+  const payWithAlipay = () => {
+    // WeChat's in-app browser blocks Alipay pages entirely.
+    if (clientType === "jsapi") {
+      setError("微信内无法打开支付宝。请点击右上角“…”，选择“在浏览器打开”后再用支付宝支付。");
+      return;
+    }
+    void buy(clientType === "native" ? "page" : "wap", "alipay");
+  };
 
   return (
     <>
@@ -244,10 +260,20 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         {router.query.wechatPay === "ready" && <p className={styles.paymentStatus}>微信授权已完成，正在继续支付。若未弹出收银台，可点击下方按钮重试。</p>}
         {router.query.wechatPay === "failed" && <p className={styles.paymentError}>微信授权未完成，可重试或使用扫码支付</p>}
         {error && <p className={styles.paymentError} role="alert">{error}</p>}
-        <button type="button" onClick={() => buy(clientType)} disabled={busy} className={styles.wechatBtn}>
-          {busy ? "正在连接微信…" : clientType === "native" ? "微信扫码支付" : "微信支付"}
-        </button>
-        {clientType !== "native" && <button type="button" onClick={() => buy("native")} disabled={busy} className={styles.secondaryPayBtn}>显示支付二维码</button>}
+        {methods.wechat && (
+          <button type="button" onClick={() => buy(clientType)} disabled={busy} className={styles.wechatBtn}>
+            {busy ? "正在连接…" : clientType === "native" ? "微信扫码支付" : "微信支付"}
+          </button>
+        )}
+        {methods.alipay && (
+          <button type="button" onClick={payWithAlipay} disabled={busy} className={styles.alipayBtn}>
+            {busy ? "正在连接…" : "支付宝支付"}
+          </button>
+        )}
+        {methods.wechat && clientType !== "native" && <button type="button" onClick={() => buy("native")} disabled={busy} className={styles.secondaryPayBtn}>显示微信支付二维码</button>}
+        {!methods.wechat && !methods.alipay && (
+          <p className={styles.paymentStatus}>暂未开放在线支付，请联系站点管理员。</p>
+        )}
         {status && <p className={styles.paymentStatus} role="status">{status}</p>}
         {orderId && <button type="button" className={styles.checkBtn} onClick={() => setCheckVersion((version) => version + 1)}>检查支付结果</button>}
       </div>

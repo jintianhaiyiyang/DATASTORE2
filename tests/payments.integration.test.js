@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  db: { getDatasets: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), updateUserPurchase: vi.fn(), markOrderPaid: vi.fn() },
+  db: { getDatasets: vi.fn(), getSiteSettings: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), updateUserPurchase: vi.fn(), markOrderPaid: vi.fn() },
   sdk: { transactions_h5: vi.fn(), transactions_jsapi: vi.fn(), transactions_native: vi.fn(), sign: vi.fn(), query: vi.fn(), close: vi.fn(), verifySign: vi.fn(), decipher_gcm: vi.fn() },
   createWxPay: vi.fn(), rate: vi.fn(),
 }));
@@ -45,9 +45,14 @@ beforeEach(() => {
   vi.stubEnv("WX_APP_ID", "wx_app");
   vi.stubEnv("WX_APP_SECRET", "test-only");
   vi.stubEnv("WX_MCH_ID", "merchant");
+  // Presence only: the SDK itself is mocked.
+  vi.stubEnv("WX_API_V3_KEY", "test-only");
+  vi.stubEnv("WX_CERT", "test-only");
+  vi.stubEnv("WX_KEY", "test-only");
   mocks.rate.mockResolvedValue({ allowed: true });
   mocks.createWxPay.mockReturnValue(mocks.sdk);
   mocks.db.getDatasets.mockResolvedValue([dataset]);
+  mocks.db.getSiteSettings.mockResolvedValue({});
   mocks.db.getPurchasedIds.mockResolvedValue([]);
   mocks.db.getOrder.mockResolvedValue(order);
   mocks.db.updateUserPurchase.mockResolvedValue(true);

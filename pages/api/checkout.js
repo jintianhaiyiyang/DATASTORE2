@@ -1,7 +1,9 @@
 import { withIronSessionApiRoute } from "../../lib/session";
-import { getDatasets, getPurchasedIds, getOrder, markOrderPaid, saveOrder, updateUserPurchase } from "../../lib/db";
-import { isOrderOwner, parsePaymentAttach, validatePaidOrder } from "../../lib/orderValidation";
+import { getDatasets, getPurchasedIds, getOrder, getSiteSettings, markOrderPaid, saveOrder, updateUserPurchase } from "../../lib/db";
+import { isOrderOwner, parsePaymentAttach, validateAlipayPaidOrder, validatePaidOrder } from "../../lib/orderValidation";
 import { createWxPay, getJsapiPayParams, truncateUtf8, unwrapWxResult } from "../../lib/wxpay";
+import { alipaySubject, closeAlipayTrade, createAlipay, createAlipayPayUrl, isAlipayPaidState, queryAlipayTrade } from "../../lib/alipay";
+import { isProviderConfigured, isProviderEnabled } from "../../lib/paymentConfig";
 import { consumeRateLimit } from "../../lib/rateLimit";
 import {
   getClientIp,
@@ -10,6 +12,53 @@ import {
   paymentOrderId,
   requireSameOrigin,
 } from "../../lib/security";
+
+const CLIENT_TYPES = { wechat: ["native", "h5", "jsapi"], alipay: ["page", "wap"] };
+const ALREADY_PAID = { status: 409, body: { message: "你已购买该资源，请直接下载" } };
+
+/**
+ * A method switch must not leave two payable orders behind. Returns a
+ * response to send, or null when it is safe to create the new order.
+ */
+async function settlePreviousOrder(previous, email, datasetId) {
+  if ((previous.provider || "wechat") === "alipay") {
+    // Without credentials the old trade can be neither queried nor paid for.
+    if (!isProviderConfigured("alipay")) return null;
+    const alipay = createAlipay();
+    const trade = await queryAlipayTrade(alipay, previous.id);
+    if (isAlipayPaidState(trade.tradeStatus)) {
+      if (!validateAlipayPaidOrder({ order: previous, trade, expectedAppId: process.env.ALIPAY_APP_ID })) {
+        throw new Error("原订单校验失败");
+      }
+      if (!await updateUserPurchase(email, datasetId)) throw new Error("购买权限保存失败");
+      await markOrderPaid(previous.id, trade.tradeNo);
+      return ALREADY_PAID;
+    }
+    if (trade.tradeStatus === "WAIT_BUYER_PAY") await closeAlipayTrade(alipay, previous.id);
+    else if (!["TRADE_NOT_EXIST", "TRADE_CLOSED"].includes(trade.tradeStatus)) throw new Error("无法确认原订单状态");
+    return null;
+  }
+
+  if (!isProviderConfigured("wechat")) return null;
+  const wxpay = createWxPay();
+  const payment = unwrapWxResult(await wxpay.query({ out_trade_no: previous.id }));
+  if (payment.trade_state === "SUCCESS") {
+    if (!validatePaidOrder({ order: previous, payment, attach: parsePaymentAttach(payment.attach),
+      expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) throw new Error("原订单校验失败");
+    if (!await updateUserPurchase(email, datasetId)) throw new Error("购买权限保存失败");
+    await markOrderPaid(previous.id, payment.transaction_id);
+    return ALREADY_PAID;
+  }
+  if (payment.trade_state === "USERPAYING") {
+    return { status: 425, body: { message: "原订单正在支付，请先检查支付结果" } };
+  }
+  if (payment.trade_state === "NOTPAY") {
+    unwrapWxResult(await wxpay.close(previous.id));
+  } else if (!["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state)) {
+    throw new Error("无法确认原订单状态");
+  }
+  return null;
+}
 
 async function checkoutHandler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");
@@ -31,17 +80,21 @@ async function checkoutHandler(req, res) {
   }
 
   const { datasetId, clientType, previousOrderId } = req.body || {};
+  const provider = req.body?.provider ?? "wechat";
   if (datasetId === undefined || datasetId === null || datasetId === "") {
     return res.status(400).json({ message: "缺少 datasetId" });
   }
-  if (clientType && !["native", "h5", "jsapi"].includes(clientType)) {
+  if (!Object.hasOwn(CLIENT_TYPES, provider)) {
+    return res.status(400).json({ message: "支付方式无效" });
+  }
+  if (clientType && !CLIENT_TYPES[provider].includes(clientType)) {
     return res.status(400).json({ message: "支付类型无效" });
   }
   if (previousOrderId !== undefined && (typeof previousOrderId !== "string" || !/^[A-Za-z0-9_*\-]{6,64}$/.test(previousOrderId))) {
     return res.status(400).json({ message: "原订单号无效" });
   }
 
-  const tradeType = clientType || "native";
+  const tradeType = clientType || CLIENT_TYPES[provider][0];
   let stage = "prepare";
   try {
     const datasets = await getDatasets();
@@ -49,6 +102,10 @@ async function checkoutHandler(req, res) {
 
     if (!dataset) {
       return res.status(404).json({ message: "资源不存在或已下架" });
+    }
+
+    if (!isProviderEnabled(await getSiteSettings(), provider)) {
+      return res.status(403).json({ message: "该支付方式已关闭，请选择其他支付方式" });
     }
 
     const email = normalizeEmail(user.email);
@@ -98,7 +155,8 @@ async function checkoutHandler(req, res) {
       return res.status(500).json({ message: "站点地址配置无效" });
     }
 
-    const wxpay = createWxPay();
+    const wxpay = provider === "wechat" ? createWxPay() : null;
+    const alipay = provider === "alipay" ? createAlipay() : null;
     if (tradeType === "jsapi" && !process.env.WX_APP_SECRET) {
       return res.status(503).json({ message: "暂时无法在微信内调起支付，请使用扫码支付", fallbackType: "native" });
     }
@@ -113,32 +171,46 @@ async function checkoutHandler(req, res) {
     if (tradeType === "h5" && clientIp === "unknown") {
       return res.status(400).json({ message: "无法识别客户端 IP" });
     }
-    // A manual method switch must not leave two payable orders behind.
     if (previousOrderId) {
       const previous = await getOrder(previousOrderId);
       if (!isOrderOwner(previous, email) || previous.datasetId !== String(dataset.id)) {
         return res.status(404).json({ message: "原订单不存在，请刷新页面重试" });
       }
-      if (previous.status === "paid") return res.status(409).json({ message: "你已购买该资源，请直接下载" });
-      stage = "query_previous";
-      const payment = unwrapWxResult(await wxpay.query({ out_trade_no: previousOrderId }));
-      if (payment.trade_state === "SUCCESS") {
-        if (!validatePaidOrder({ order: previous, payment, attach: parsePaymentAttach(payment.attach),
-          expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) throw new Error("原订单校验失败");
-        if (!await updateUserPurchase(email, dataset.id)) throw new Error("购买权限保存失败");
-        await markOrderPaid(previousOrderId, payment.transaction_id);
-        return res.status(409).json({ message: "你已购买该资源，请直接下载" });
-      }
-      if (payment.trade_state === "USERPAYING") {
-        return res.status(425).json({ message: "原订单正在支付，请先检查支付结果" });
-      }
-      if (payment.trade_state === "NOTPAY") {
-        stage = "close_previous";
-        unwrapWxResult(await wxpay.close(previousOrderId));
-      } else if (!["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state)) {
-        throw new Error("无法确认原订单状态");
-      }
+      if (previous.status === "paid") return res.status(409).json(ALREADY_PAID.body);
+      stage = "settle_previous";
+      const outcome = await settlePreviousOrder(previous, email, dataset.id);
+      if (outcome) return res.status(outcome.status).json(outcome.body);
     }
+
+    stage = "save_order";
+    await saveOrder({
+      id: outTradeNo,
+      provider,
+      datasetId: String(dataset.id),
+      email,
+      amount: amountInCents,
+      currency: "CNY",
+      clientType: tradeType,
+      appid: provider === "alipay" ? process.env.ALIPAY_APP_ID : process.env.WX_APP_ID,
+      ...(provider === "wechat" ? { mchid: process.env.WX_MCH_ID } : {}),
+    });
+
+    stage = "create_order";
+    if (provider === "alipay") {
+      // The buyer returns here; payOrder resumes result polling on the page.
+      const returnUrl = new URL(`/dataset/${encodeURIComponent(dataset.id)}`, normalizedSiteUrl);
+      returnUrl.searchParams.set("payOrder", outTradeNo);
+      const payUrl = createAlipayPayUrl(alipay, {
+        type: tradeType,
+        orderId: outTradeNo,
+        amount: amountInCents,
+        subject: alipaySubject(dataset.name),
+        notifyUrl: new URL("/api/notify/alipay", normalizedSiteUrl).toString(),
+        returnUrl: returnUrl.toString(),
+      });
+      return res.status(200).json({ type: "alipay", payUrl, outTradeNo });
+    }
+
     const description = truncateUtf8(`购买: ${dataset.name}`, 127);
     const attach = JSON.stringify({ orderId: outTradeNo });
     const baseParams = {
@@ -151,19 +223,6 @@ async function checkoutHandler(req, res) {
       attach,
     };
 
-    stage = "save_order";
-    await saveOrder({
-      id: outTradeNo,
-      datasetId: String(dataset.id),
-      email,
-      amount: amountInCents,
-      currency: "CNY",
-      clientType: tradeType,
-      appid: process.env.WX_APP_ID,
-      mchid: process.env.WX_MCH_ID,
-    });
-
-    stage = "create_order";
     if (tradeType === "jsapi") {
       const openid = req.session.wechatOpenId;
 
@@ -206,6 +265,7 @@ async function checkoutHandler(req, res) {
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
   } catch (err) {
     console.error("支付初始化错误:", {
+      provider,
       paymentType: tradeType,
       stage,
       name: err?.name,
@@ -214,6 +274,12 @@ async function checkoutHandler(req, res) {
       status: err?.status,
       providerMessage: err?.providerMessage,
     });
+    if (provider === "alipay") {
+      return res.status(502).json({
+        code: "PAYMENT_SERVICE_ERROR",
+        message: "暂时无法调起支付宝，请稍后重试或选择其他支付方式",
+      });
+    }
     // A business permission rejection is not a transient gateway failure.
     // Use a stable, safe response; never forward raw SDK payloads or secrets.
     if (err?.name === "WxPayError" && err.code === "NO_AUTH") {

@@ -4,6 +4,7 @@ import {
   updateUserPurchase,
 } from "../../../lib/db";
 import { createWxPay } from "../../../lib/wxpay";
+import { readRawBody } from "../../../lib/rawBody";
 import {
   parsePaymentAttach,
   validatePaidOrder,
@@ -12,17 +13,6 @@ import {
 export const config = {
   api: { bodyParser: false },
 };
-
-async function readRawBody(req, maxBytes = 1024 * 1024) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > maxBytes) throw new Error("请求体过大");
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
 
 /**
  * WeChat Pay APIv3 payment notification callback.

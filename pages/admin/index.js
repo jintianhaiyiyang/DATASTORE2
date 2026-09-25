@@ -3,6 +3,7 @@ import Layout from "../../components/Layout";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { updateSiteSettingsCache } from "../../lib/useSiteSettings";
+import { ANNOUNCEMENT_MAX_LENGTH } from "../../lib/siteDefaults";
 import styles from "../../styles/Admin.module.css";
 
 export default function AdminPage() {
@@ -165,30 +166,17 @@ export default function AdminPage() {
           {loadError && <p className={styles.msgErr} role="alert">{loadError}</p>}
 
           <div className={styles.tabs}>
-            <button
-              type="button"
-              aria-pressed={tab === "dataset"}
-              className={`${styles.tabBtn} ${tab === "dataset" ? styles.tabActive : ""}`}
-              onClick={() => setTab("dataset")}
-            >
-              数据集
-            </button>
-            <button
-              type="button"
-              aria-pressed={tab === "article"}
-              className={`${styles.tabBtn} ${tab === "article" ? styles.tabActive : ""}`}
-              onClick={() => setTab("article")}
-            >
-              文章
-            </button>
-            <button
-              type="button"
-              aria-pressed={tab === "site"}
-              className={`${styles.tabBtn} ${tab === "site" ? styles.tabActive : ""}`}
-              onClick={() => setTab("site")}
-            >
-              站点设置
-            </button>
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={tab === key}
+                className={`${styles.tabBtn} ${tab === key ? styles.tabActive : ""}`}
+                onClick={() => setTab(key)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           {tab === "dataset" ? (
@@ -205,21 +193,28 @@ export default function AdminPage() {
               setEditingArticle={setEditingArticle}
               refresh={fetchAllData}
             />
+          ) : !siteSettings ? (
+            <p className={styles.loading}>正在加载站点设置...</p>
+          ) : tab === "announcement" ? (
+            <AnnouncementSection siteSettings={siteSettings} setSiteSettings={setSiteSettings} />
+          ) : tab === "payment" ? (
+            <PaymentSection siteSettings={siteSettings} setSiteSettings={setSiteSettings} />
           ) : (
-            siteSettings ? (
-              <SiteSettingsSection
-                siteSettings={siteSettings}
-                setSiteSettings={setSiteSettings}
-              />
-            ) : (
-              <p className={styles.loading}>正在加载站点设置...</p>
-            )
+            <SiteSettingsSection siteSettings={siteSettings} setSiteSettings={setSiteSettings} />
           )}
         </div>
       </div>
     </Layout>
   );
 }
+
+const TABS = [
+  { key: "dataset", label: "数据集" },
+  { key: "article", label: "文章" },
+  { key: "announcement", label: "公告" },
+  { key: "payment", label: "支付" },
+  { key: "site", label: "站点设置" },
+];
 
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
@@ -273,6 +268,184 @@ function FormError({ msg }) {
   return msg ? <p className={styles.msgErr} role="alert">{msg}</p> : null;
 }
 
+// Each settings tab sends only its own fields; the API merges them.
+function useSettingsSave(setSiteSettings, successText) {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [notice, flash] = useNotice();
+  const save = async (payload) => {
+    if (saving) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/site", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSiteSettings(data);
+        updateSiteSettingsCache(data);
+        flash(successText);
+      } else {
+        setMsg(data.message || "保存失败");
+      }
+    } catch {
+      setMsg("网络错误，请重试");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return { saving, msg, setMsg, notice, save };
+}
+
+function Toggle({ label, description, checked, onChange }) {
+  const id = useId();
+  return (
+    <div className={styles.toggleRow}>
+      <div className={styles.toggleText}>
+        <label htmlFor={id} className={styles.toggleLabel}>{label}</label>
+        {description && <p className={styles.hint}>{description}</p>}
+      </div>
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        className={styles.switch}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+    </div>
+  );
+}
+
+function AnnouncementSection({ siteSettings, setSiteSettings }) {
+  const [form, setForm] = useState(() => ({
+    announcementEnabled: !!siteSettings.announcementEnabled,
+    announcementText: siteSettings.announcementText || "",
+    announcementLink: siteSettings.announcementLink || "",
+    announcementTone: siteSettings.announcementTone === "warning" ? "warning" : "info",
+  }));
+  const { saving, msg, notice, save } = useSettingsSave(setSiteSettings, "公告已保存");
+  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const warning = form.announcementTone === "warning";
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); void save(form); }}>
+      <h2 className={styles.sectionTitle}>公告栏</h2>
+      <p className={styles.sectionHint}>
+        公告显示在每个页面的导航栏下方。访客可以关闭公告；修改公告内容后会重新显示给所有人。
+      </p>
+      <Toggle
+        label="在网站顶部显示公告"
+        checked={form.announcementEnabled}
+        onChange={(checked) => setForm((prev) => ({ ...prev, announcementEnabled: checked }))}
+      />
+      <div className={styles.formGrid}>
+        <Field label="公告内容" hint={`${form.announcementText.length} / ${ANNOUNCEMENT_MAX_LENGTH} 字，纯文本`} full>
+          {(id) => (
+            <textarea id={id} className={`${styles.textarea} ${styles.textareaPlain}`} value={form.announcementText}
+              onChange={set("announcementText")} maxLength={ANNOUNCEMENT_MAX_LENGTH}
+              placeholder="例如：国庆期间所有数据集 8 折，10 月 7 日截止。" required={form.announcementEnabled} />
+          )}
+        </Field>
+        <Field label="链接（可选）" hint="站内路径如 /dataset/…，或 https:// 开头的外部链接">
+          {(id) => <input id={id} className={styles.input} value={form.announcementLink}
+            onChange={set("announcementLink")} placeholder="/dataset/…" maxLength={500} />}
+        </Field>
+        <Field label="样式">
+          {(id) => (
+            <select id={id} className={styles.input} value={form.announcementTone} onChange={set("announcementTone")}>
+              <option value="info">普通（蓝色）</option>
+              <option value="warning">重要（橙色）</option>
+            </select>
+          )}
+        </Field>
+      </div>
+
+      <p className={styles.previewLabel}>预览</p>
+      <div className={`${styles.announcePreview} ${warning ? styles.announcePreviewWarning : ""}`}>
+        {form.announcementText || "公告内容会显示在这里"}
+        {form.announcementLink && <span className={styles.announcePreviewLink}>查看详情</span>}
+      </div>
+
+      <div className={styles.btnRow}>
+        <button type="submit" className={styles.primaryBtn} disabled={saving}>
+          {saving ? "保存中…" : "保存公告"}
+        </button>
+      </div>
+      <FormError msg={msg} />
+      <Notice text={notice} />
+    </form>
+  );
+}
+
+const PAYMENT_PROVIDERS = [
+  {
+    key: "enableWechatPay",
+    id: "wechat",
+    name: "微信支付",
+    description: "电脑显示二维码；手机浏览器跳转微信；微信内直接调起收银台。",
+    env: "WX_APP_ID、WX_MCH_ID、WX_API_V3_KEY、WX_CERT、WX_KEY（微信内支付另需 WX_APP_SECRET）",
+  },
+  {
+    key: "enableAlipay",
+    id: "alipay",
+    name: "支付宝",
+    description: "电脑跳转支付宝收银台；手机浏览器跳转支付宝网页或 App。微信内无法使用支付宝。",
+    env: "ALIPAY_APP_ID、ALIPAY_PRIVATE_KEY、ALIPAY_PUBLIC_KEY",
+  },
+];
+
+function PaymentSection({ siteSettings, setSiteSettings }) {
+  const [form, setForm] = useState(() => ({
+    enableWechatPay: siteSettings.enableWechatPay !== false,
+    enableAlipay: siteSettings.enableAlipay !== false,
+  }));
+  const configured = siteSettings.paymentConfigured || {};
+  const { saving, msg, notice, save } = useSettingsSave(setSiteSettings, "支付设置已保存");
+  const noneAvailable = PAYMENT_PROVIDERS.every((p) => !(form[p.key] && configured[p.id]));
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); void save(form); }}>
+      <h2 className={styles.sectionTitle}>支付方式</h2>
+      <p className={styles.sectionHint}>
+        关闭后，购买页不再显示该支付方式，服务端也会拒绝用它创建新订单；已经发起的订单仍会正常确认并解锁。
+      </p>
+      <div className={styles.providerList}>
+        {PAYMENT_PROVIDERS.map((p) => (
+          <div key={p.id} className={styles.providerCard}>
+            <Toggle
+              label={`在购买页显示${p.name}`}
+              description={p.description}
+              checked={form[p.key]}
+              onChange={(checked) => setForm((prev) => ({ ...prev, [p.key]: checked }))}
+            />
+            <p className={configured[p.id] ? styles.statusOk : styles.statusWarn}>
+              {configured[p.id] ? "环境变量已配置" : `未配置环境变量：${p.env}`}
+            </p>
+            {form[p.key] && !configured[p.id] && (
+              <p className={styles.hint}>已开启但尚未配置，前台暂不显示此支付方式。</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className={styles.hint}>“已配置”只表示环境变量已填写；支付产品是否开通、签约，以商户平台审核结果为准。</p>
+      {noneAvailable && (
+        <p className={styles.msgWarn} role="status">当前没有可用的支付方式，用户将无法购买付费资源。</p>
+      )}
+      <div className={styles.btnRow}>
+        <button type="submit" className={styles.primaryBtn} disabled={saving}>
+          {saving ? "保存中…" : "保存支付设置"}
+        </button>
+      </div>
+      <FormError msg={msg} />
+      <Notice text={notice} />
+    </form>
+  );
+}
+
 function SiteSettingsSection({ siteSettings, setSiteSettings }) {
   const [form, setForm] = useState(() => ({
     siteTitle: siteSettings?.siteTitle || "",
@@ -281,9 +454,7 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
     footerText: siteSettings?.footerText || "",
     aboutContent: siteSettings?.aboutContent || "",
   }));
-  const [msg, setMsg] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [notice, flash] = useNotice();
+  const { saving, msg, setMsg, notice, save } = useSettingsSave(setSiteSettings, "站点设置已保存");
   // Only preview values the server would accept; next/image throws on others.
   const logoPreview = /^(https:\/\/|data:image\/)/i.test(form.logoUrl) ? form.logoUrl : "";
 
@@ -307,30 +478,9 @@ function SiteSettingsSection({ siteSettings, setSiteSettings }) {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = async (e) => {
+  const handleSave = (e) => {
     e.preventDefault();
-    if (saving) return;
-    setSaving(true);
-    setMsg("");
-    try {
-      const res = await fetch("/api/site", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setSiteSettings(data);
-        updateSiteSettingsCache(data);
-        flash("站点设置已保存");
-      } else {
-        setMsg(data.message || "保存失败");
-      }
-    } catch {
-      setMsg("网络错误，请重试");
-    } finally {
-      setSaving(false);
-    }
+    void save(form);
   };
 
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));

@@ -91,7 +91,7 @@ function DatasetContent({ id }) {
                     <a href={dataset.downloadUrl} target="_blank" rel="noopener noreferrer" className={styles.downloadBtn}>前往下载</a>
                   </> : <p className={styles.paymentError}>下载链接暂不可用，请联系站点管理员</p>
                 ) : <PaymentPanel dataset={dataset} user={user} onPaid={refreshAccess} />}
-                <div className={styles.securityTip}>{dataset.isPaid ? "下载链接将在新窗口打开" : "由微信支付处理，付款确认后自动解锁"}</div>
+                <div className={styles.securityTip}>{dataset.isPaid ? "下载链接将在新窗口打开" : "付款确认后自动解锁，请勿重复付款"}</div>
               </div>
             </aside>
           </div>

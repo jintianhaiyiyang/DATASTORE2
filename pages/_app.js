@@ -24,8 +24,11 @@ MyApp.getInitialProps = async (appContext) => {
 
   if (typeof window === "undefined") {
     try {
-      const { getSiteSettings } = await import("../lib/db");
-      siteSettings = await getSiteSettings();
+      const [{ getSiteSettings }, { withPaymentAvailability }] = await Promise.all([
+        import("../lib/db"),
+        import("../lib/paymentConfig"),
+      ]);
+      siteSettings = withPaymentAvailability(await getSiteSettings());
     } catch (error) {
       console.error("SSR site settings load failed:", error?.message || error);
     }
