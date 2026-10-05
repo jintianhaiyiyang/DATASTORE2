@@ -1,5 +1,6 @@
 import { getConfig } from "../../lib/usdt/config";
 import { connectRpc } from "../../lib/usdt/rpc";
+import { ensureCheckoutScan } from "../../lib/usdt/checkout";
 import { reserveOrder, cancelOrder } from "../../lib/usdt/store";
 import { fulfillOrder } from "../../lib/fulfillOrder";
 import { withIronSessionApiRoute } from "../../lib/session";
@@ -18,6 +19,7 @@ import {
 } from "../../lib/security";
 
 const CLIENT_TYPES = { wechat: ["native", "h5", "jsapi"], alipay: ["page", "wap"], usdt: ["bep20"] };
+export const config = { maxDuration: 60 };
 const ALREADY_PAID = { status: 409, body: { message: "你已购买该资源，请直接下载" } };
 
 /**
@@ -189,8 +191,16 @@ async function checkoutHandler(req, res) {
     }
 
     if (provider === "usdt") {
+      stage = "usdt_config";
       const config = await getConfig();
+      stage = "usdt_rpc";
       const rpc = await connectRpc(config);
+      stage = "usdt_scan";
+      await ensureCheckoutScan(config, rpc.head);
+      // A recovery scan may have settled a previous purchase while this
+      // request waited. Avoid issuing another invoice for that resource.
+      if ((await getPurchasedIds(email)).includes(String(dataset.id))) return res.status(409).json(ALREADY_PAID.body);
+      stage = "usdt_reserve";
       await reserveOrder({ id: outTradeNo, datasetId: String(dataset.id), email,
         cnyPrice: String(dataset.price), clientType: "bep20" }, config, rpc.head);
       return res.status(200).json({ type: "usdt", outTradeNo });
@@ -280,7 +290,13 @@ async function checkoutHandler(req, res) {
   } catch (err) {
     if (provider === "usdt") {
       console.error(JSON.stringify({ event: "USDT checkout unavailable", stage }));
-      return res.status(503).json({ message: "USDT 收款暂不可用（配置、扫描进度或可用尾数不足），请稍后重试或选择其他方式" });
+      const messages = {
+        usdt_config: "USDT 收款配置暂不可用，请联系管理员或选择其他方式",
+        usdt_rpc: "BSC 网络连接暂不可用，请稍后重试或选择其他方式",
+        usdt_scan: "正在恢复链上扫描，请等待 30 秒后重试；当前尚未创建支付订单",
+        usdt_reserve: "USDT 支付金额暂时无法分配，请稍后重试或联系管理员",
+      };
+      return res.status(503).json({ message: messages[stage] || "USDT 收款暂不可用，请稍后重试或选择其他方式" });
     }
     console.error("支付初始化错误:", {
       provider,
