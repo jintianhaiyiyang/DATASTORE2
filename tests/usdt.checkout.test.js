@@ -77,6 +77,8 @@ describe('USDT checkout scan recovery', () => {
     const allocationError = res(); await checkout(req(), allocationError); expect(allocationError.body.message).toContain('金额');
   });
   it('preserves the time and cursor readiness limits', () => {
+    expect(scanReady({ lastSuccessAt: 1, lastScannedBlock: 100, lastLiveSuccessAt: 180000, lastLiveScannedBlock: 10000 }, head, 181001)).toBe(true);
+    expect(scanReady({ lastSuccessAt: 180000, lastScannedBlock: 10000, lastLiveSuccessAt: 1, lastLiveScannedBlock: 10000 }, head, 181001)).toBe(false);
     expect(scanReady({ lastSuccessAt: 1000, lastScannedBlock: 9600 }, head, 181000)).toBe(true);
     expect(scanReady({ lastSuccessAt: 1000, lastScannedBlock: 9599 }, head, 181000)).toBe(false);
     expect(scanReady({ lastSuccessAt: 1000, lastScannedBlock: 10000 }, head, 181001)).toBe(false);

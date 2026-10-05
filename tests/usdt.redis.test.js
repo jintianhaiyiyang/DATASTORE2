@@ -52,6 +52,29 @@ suite('real Redis + RPC scanner integration', () => {
     for (const o of orders) expect(await redis.get(amountKey(config, o.expectedAtomic))).toBe(o.id);
     expect(await command('TTL', `order:${orders[0].id}`)).toBe(-1);
   });
+  it('accepts and settles current invoices after a long outage while preserving old history', async () => {
+    const oldOrder = await invoice('ORDER_beforeOutage');
+    const oldTx = transfer(oldOrder.expectedAtomic, 101, 100);
+    head = 15000; clock = BASE + head * 1000;
+    await scan();
+    let watch = await redis.get(WATCH);
+    expect(watch.status).toBe('catching_up');
+    expect(watch.lastScannedBlock).toBeLessThan(head - 400);
+    expect(watch.lastLiveScannedBlock).toBe(head);
+    expect((await getOrder(oldOrder.id)).status).toBe('paid');
+    expect((await redis.get(txKey(oldTx))).status).toBe('confirmed');
+    const newOrder = await invoice('ORDER_afterOutage');
+    const currentTx = transfer(newOrder.expectedAtomic, 15001, 101);
+    head = 15025; clock = BASE + head * 1000;
+    await scan();
+    watch = await redis.get(WATCH);
+    expect(watch.lastScannedBlock).toBeLessThan(10000);
+    expect(watch.lastLiveScannedBlock).toBe(head);
+    expect((await getOrder(newOrder.id)).status).toBe('paid');
+    expect((await redis.get(txKey(currentTx))).status).toBe('confirmed');
+    await scan();
+    expect(await command('ZCARD', 'usdt:transactions')).toBe(2);
+  });
   it('never recycles cancelled, expired or paid tails, and fails closed at exhaustion', async () => {
     const first = await invoice('ORDER_tail1', { tailMax: 2 });
     await cancelOrder(first.id);

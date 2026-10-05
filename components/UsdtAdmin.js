@@ -45,6 +45,7 @@ export default function UsdtAdmin() {
       <p role="status">{message}</p>
       <p>扫描状态：{watch?.status || '未初始化'}；当前区块：{watch?.currentBlock ?? '—'}；最近扫描区块：{watch?.lastScannedBlock ?? '—'}</p>
       <p>最近成功扫描：{date(watch?.lastSuccessAt)}；最近错误：{date(watch?.lastErrorAt)}</p>
+      <p>最新付款扫描区块：{watch?.lastLiveScannedBlock ?? '—'}；历史待补扫区块：{Math.max(0, (watch?.currentBlock || 0) - (watch?.lastScannedBlock || 0))}</p>
       <p className={styles.warning}>必须部署每分钟运行的持久调度任务。超过 3 分钟未成功扫描会拒绝新订单；关闭支付开关不会停止旧订单补偿扫描。仅有网页轮询不能代替扫描器。</p>
     </section>
     <section className={styles.card}><h2>USDT 链上交易</h2><p>未匹配、少付、多付、逾期及重复转账均保留。查询申请只表示用户声称该交易属于其订单，不能据此自动发货。</p>
