@@ -1,8 +1,5 @@
-import {
-  getOrder,
-  markOrderPaid,
-  updateUserPurchase,
-} from "../../../lib/db";
+import { fulfillOrder } from "../../../lib/fulfillOrder";
+import { getOrder } from "../../../lib/db";
 import { createWxPay } from "../../../lib/wxpay";
 import { readRawBody } from "../../../lib/rawBody";
 import {
@@ -84,9 +81,7 @@ export default async function wechatNotify(req, res) {
         return res.status(409).json({ code: "FAIL", message: "订单数据校验失败" });
       }
       if (order.status !== "paid") {
-        const granted = await updateUserPurchase(order.email, order.datasetId);
-        if (!granted) throw new Error("购买权限保存失败");
-        await markOrderPaid(orderId, data.transaction_id);
+        await fulfillOrder(orderId, data.transaction_id);
       }
     }
 

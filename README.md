@@ -256,3 +256,7 @@ SDK 返回格式参考：[H5](https://github.com/klover2/wechatpay-node-v3-ts/bl
 ## License
 
 [Apache License 2.0](./LICENSE)
+
+### USDT (BEP-20 / BNB Smart Chain)
+
+新增非托管 USDT 收银台、后台交易与配置、RPC 补偿扫描和幂等资源解锁。上线前必须配置独立扫描调度任务；完整配置、设计限制及小额实测步骤见 [USDT/BSC 部署说明](docs/USDT-BSC.md)。默认关闭，不影响已有支付宝和微信支付。

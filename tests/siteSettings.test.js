@@ -28,7 +28,7 @@ describe("site settings updates", () => {
 
   it("shows a payment method only when enabled and configured", () => {
     const env = { ALIPAY_APP_ID: "a", ALIPAY_PRIVATE_KEY: "k", ALIPAY_PUBLIC_KEY: "p" };
-    expect(withPaymentAvailability({}, env).payments).toEqual({ wechat: false, alipay: true });
-    expect(withPaymentAvailability({ enableAlipay: false }, env).payments).toEqual({ wechat: false, alipay: false });
+    expect(withPaymentAvailability({}, env).payments).toEqual({ wechat: false, alipay: true, usdt: false });
+    expect(withPaymentAvailability({ enableAlipay: false }, env).payments).toEqual({ wechat: false, alipay: false, usdt: false });
   });
 });

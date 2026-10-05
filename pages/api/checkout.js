@@ -1,5 +1,9 @@
+import { getConfig } from "../../lib/usdt/config";
+import { connectRpc } from "../../lib/usdt/rpc";
+import { reserveOrder, cancelOrder } from "../../lib/usdt/store";
+import { fulfillOrder } from "../../lib/fulfillOrder";
 import { withIronSessionApiRoute } from "../../lib/session";
-import { getDatasets, getPurchasedIds, getOrder, getSiteSettings, markOrderPaid, saveOrder, updateUserPurchase } from "../../lib/db";
+import { getDatasets, getPurchasedIds, getOrder, getSiteSettings, saveOrder } from "../../lib/db";
 import { isOrderOwner, parsePaymentAttach, validateAlipayPaidOrder, validatePaidOrder } from "../../lib/orderValidation";
 import { createWxPay, getJsapiPayParams, truncateUtf8, unwrapWxResult } from "../../lib/wxpay";
 import { alipaySubject, closeAlipayTrade, createAlipay, createAlipayPayUrl, isAlipayPaidState, queryAlipayTrade } from "../../lib/alipay";
@@ -13,14 +17,18 @@ import {
   requireSameOrigin,
 } from "../../lib/security";
 
-const CLIENT_TYPES = { wechat: ["native", "h5", "jsapi"], alipay: ["page", "wap"] };
+const CLIENT_TYPES = { wechat: ["native", "h5", "jsapi"], alipay: ["page", "wap"], usdt: ["bep20"] };
 const ALREADY_PAID = { status: 409, body: { message: "你已购买该资源，请直接下载" } };
 
 /**
  * A method switch must not leave two payable orders behind. Returns a
  * response to send, or null when it is safe to create the new order.
  */
-async function settlePreviousOrder(previous, email, datasetId) {
+async function settlePreviousOrder(previous) {
+  if (previous.provider === "usdt") {
+    if (!await cancelOrder(previous.id)) return { status: 425, body: { message: "USDT 订单正在确认，请先检查结果" } };
+    return null;
+  }
   if ((previous.provider || "wechat") === "alipay") {
     // Without credentials the old trade can be neither queried nor paid for.
     if (!isProviderConfigured("alipay")) return null;
@@ -30,8 +38,7 @@ async function settlePreviousOrder(previous, email, datasetId) {
       if (!validateAlipayPaidOrder({ order: previous, trade, expectedAppId: process.env.ALIPAY_APP_ID })) {
         throw new Error("原订单校验失败");
       }
-      if (!await updateUserPurchase(email, datasetId)) throw new Error("购买权限保存失败");
-      await markOrderPaid(previous.id, trade.tradeNo);
+      await fulfillOrder(previous.id, trade.tradeNo);
       return ALREADY_PAID;
     }
     if (trade.tradeStatus === "WAIT_BUYER_PAY") await closeAlipayTrade(alipay, previous.id);
@@ -45,8 +52,7 @@ async function settlePreviousOrder(previous, email, datasetId) {
   if (payment.trade_state === "SUCCESS") {
     if (!validatePaidOrder({ order: previous, payment, attach: parsePaymentAttach(payment.attach),
       expectedAppId: process.env.WX_APP_ID, expectedMchId: process.env.WX_MCH_ID })) throw new Error("原订单校验失败");
-    if (!await updateUserPurchase(email, datasetId)) throw new Error("购买权限保存失败");
-    await markOrderPaid(previous.id, payment.transaction_id);
+    await fulfillOrder(previous.id, payment.transaction_id);
     return ALREADY_PAID;
   }
   if (payment.trade_state === "USERPAYING") {
@@ -178,8 +184,16 @@ async function checkoutHandler(req, res) {
       }
       if (previous.status === "paid") return res.status(409).json(ALREADY_PAID.body);
       stage = "settle_previous";
-      const outcome = await settlePreviousOrder(previous, email, dataset.id);
+      const outcome = await settlePreviousOrder(previous);
       if (outcome) return res.status(outcome.status).json(outcome.body);
+    }
+
+    if (provider === "usdt") {
+      const config = await getConfig();
+      const rpc = await connectRpc(config);
+      await reserveOrder({ id: outTradeNo, datasetId: String(dataset.id), email,
+        cnyPrice: String(dataset.price), clientType: "bep20" }, config, rpc.head);
+      return res.status(200).json({ type: "usdt", outTradeNo });
     }
 
     stage = "save_order";
@@ -264,6 +278,10 @@ async function checkoutHandler(req, res) {
     }
     return res.status(200).json({ type: "qrcode", codeUrl, outTradeNo });
   } catch (err) {
+    if (provider === "usdt") {
+      console.error(JSON.stringify({ event: "USDT checkout unavailable", stage }));
+      return res.status(503).json({ message: "USDT 收款暂不可用（配置、扫描进度或可用尾数不足），请稍后重试或选择其他方式" });
+    }
     console.error("支付初始化错误:", {
       provider,
       paymentType: tradeType,

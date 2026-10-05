@@ -2,11 +2,12 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  db: { getDatasets: vi.fn(), getSiteSettings: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), updateUserPurchase: vi.fn(), markOrderPaid: vi.fn() },
+  db: { getDatasets: vi.fn(), getSiteSettings: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), fulfillOrder: vi.fn() },
   sdk: { transactions_h5: vi.fn(), transactions_jsapi: vi.fn(), transactions_native: vi.fn(), sign: vi.fn(), query: vi.fn(), close: vi.fn(), verifySign: vi.fn(), decipher_gcm: vi.fn() },
   createWxPay: vi.fn(), rate: vi.fn(),
 }));
 vi.mock("../lib/session", () => ({ withIronSessionApiRoute: (handler) => handler }));
+vi.mock("../lib/fulfillOrder", () => ({ fulfillOrder: mocks.db.fulfillOrder }));
 vi.mock("../lib/db", () => mocks.db);
 vi.mock("../lib/rateLimit", () => ({ consumeRateLimit: mocks.rate }));
 vi.mock("../lib/wxpay", async (importOriginal) => ({ ...await importOriginal(), createWxPay: mocks.createWxPay }));
@@ -55,7 +56,7 @@ beforeEach(() => {
   mocks.db.getSiteSettings.mockResolvedValue({});
   mocks.db.getPurchasedIds.mockResolvedValue([]);
   mocks.db.getOrder.mockResolvedValue(order);
-  mocks.db.updateUserPurchase.mockResolvedValue(true);
+  mocks.db.fulfillOrder.mockResolvedValue(true);
   mocks.sdk.transactions_native.mockResolvedValue({ status: 200, data: { code_url: "weixin://wxpay/bizpayurl?pr=test" } });
   mocks.sdk.transactions_jsapi.mockResolvedValue({ status: 200, data: params });
   mocks.sdk.transactions_h5.mockResolvedValue({ status: 200, data: { h5_url: "https://wx.tenpay.com/cgi-bin/mmpayweb-bin/checkmweb?prepay_id=test" } });
@@ -117,8 +118,7 @@ describe("checkout API channel regressions", () => {
     for (const other of ["h5", "jsapi", "native"].filter((channel) => channel !== type)) {
       expect(mocks.sdk[`transactions_${other}`]).not.toHaveBeenCalled();
     }
-    expect(mocks.db.updateUserPurchase).not.toHaveBeenCalled();
-    expect(mocks.db.markOrderPaid).not.toHaveBeenCalled();
+    expect(mocks.db.fulfillOrder).not.toHaveBeenCalled();
   });
   it("does not mislabel an old-order query permission failure as an unopened new channel", async () => {
     mocks.sdk.query.mockResolvedValue({ status: 403, error: { code: "NO_AUTH", message: "permission denied" } });
@@ -170,7 +170,7 @@ describe("checkout API channel regressions", () => {
     const req = request(); req.body.previousOrderId = order.id;
     const res = response(); await checkout(req, res);
     expect(res.statusCode).toBe(409);
-    expect(mocks.db.updateUserPurchase).toHaveBeenCalledWith(order.email, dataset.id);
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledWith(order.id, paid.transaction_id);
     expect(mocks.db.saveOrder).not.toHaveBeenCalled();
   });
   it("does not switch methods while payment is in progress or closing fails", async () => {
@@ -190,8 +190,7 @@ describe("payment confirmation and access", () => {
     const req = request(); req.method = "GET"; req.query.orderId = order.id;
     const res = response(); await checkOrder(req, res);
     expect(res.body.paid).toBe(true);
-    expect(mocks.db.updateUserPurchase).toHaveBeenCalledWith(order.email, order.datasetId);
-    expect(mocks.db.updateUserPurchase.mock.invocationCallOrder[0]).toBeLessThan(mocks.db.markOrderPaid.mock.invocationCallOrder[0]);
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledWith(order.id, paid.transaction_id);
   });
   it("does not disclose another user's order", async () => {
     const req = request(); req.method = "GET"; req.query.orderId = order.id; req.session.user.email = "other@example.com";
@@ -207,23 +206,23 @@ describe("payment confirmation and access", () => {
     const req = request(); req.method = "GET"; req.query.orderId = order.id;
     const res = response(); await checkOrder(req, res);
     expect(res.statusCode).toBe(409);
-    expect(mocks.db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(mocks.db.fulfillOrder).not.toHaveBeenCalled();
   });
   it("does not report success when access could not be saved", async () => {
-    mocks.db.updateUserPurchase.mockResolvedValue(false);
+    mocks.db.fulfillOrder.mockRejectedValue(new Error("write failed"));
     const req = request(); req.method = "GET"; req.query.orderId = order.id;
     const res = response(); await checkOrder(req, res);
     expect(res.statusCode).toBe(500);
     const notification = response(); await notify(notificationRequest(), notification);
     expect(notification.statusCode).toBe(500);
-    expect(mocks.db.markOrderPaid).not.toHaveBeenCalled();
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledTimes(2);
   });
   it("requires a valid raw-body signature on payment notifications", async () => {
     mocks.sdk.verifySign.mockResolvedValue(false);
     const res = response(); await notify(notificationRequest(), res);
     expect(res.statusCode).toBe(401);
     expect(mocks.sdk.decipher_gcm).not.toHaveBeenCalled();
-    expect(mocks.db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(mocks.db.fulfillOrder).not.toHaveBeenCalled();
   });
   it("accepts a verified notification and ignores repeat delivery after fulfillment", async () => {
     const res = response(); await notify(notificationRequest(), res);
@@ -231,7 +230,7 @@ describe("payment confirmation and access", () => {
     expect(mocks.sdk.verifySign.mock.calls[0][0].body).toBe(JSON.stringify({ resource: { ciphertext: "test", nonce: "nonce" } }));
     mocks.db.getOrder.mockResolvedValue({ ...order, status: "paid" });
     await notify(notificationRequest(), response());
-    expect(mocks.db.updateUserPurchase).toHaveBeenCalledTimes(1);
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledTimes(1);
   });
 });
 

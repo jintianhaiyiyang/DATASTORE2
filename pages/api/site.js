@@ -12,7 +12,7 @@ function isAdmin(req) {
 function present(req, settings) {
   const result = withPaymentAvailability(settings);
   // Which keys are configured is only useful to the admin settings page.
-  if (isAdmin(req)) result.paymentConfigured = paymentConfigured();
+  if (isAdmin(req)) result.paymentConfigured = paymentConfigured(process.env, settings);
   return result;
 }
 

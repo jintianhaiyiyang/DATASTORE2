@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ getOrder: vi.fn(), updateUserPurchase: vi.fn(), markOrderPaid: vi.fn() }));
+const db = vi.hoisted(() => ({ getOrder: vi.fn(), fulfillOrder: vi.fn() }));
+vi.mock("../lib/fulfillOrder", () => ({ fulfillOrder: db.fulfillOrder }));
 vi.mock("../lib/db", () => db);
 
 import notify from "../pages/api/notify/alipay";
@@ -46,7 +47,7 @@ beforeEach(() => {
   vi.stubEnv("ALIPAY_PUBLIC_KEY", pem(gateway.publicKey, "spki"));
   vi.stubEnv("ALIPAY_SELLER_ID", "");
   db.getOrder.mockResolvedValue(order);
-  db.updateUserPurchase.mockResolvedValue(true);
+  db.fulfillOrder.mockResolvedValue(true);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
@@ -94,8 +95,7 @@ describe("alipay notification", () => {
     const res = response();
     await notify(post(signed(paidNotice())), res);
     expect(res.body).toBe("success");
-    expect(db.updateUserPurchase).toHaveBeenCalledWith(order.email, order.datasetId);
-    expect(db.markOrderPaid).toHaveBeenCalledWith(order.id, "2026092522001");
+    expect(db.fulfillOrder).toHaveBeenCalledWith(order.id, "2026092522001");
   });
 
   it("rejects forged or tampered notifications", async () => {
@@ -106,7 +106,7 @@ describe("alipay notification", () => {
     const tampered = response();
     await notify(post({ ...signed(paidNotice()), total_amount: "0.01" }), tampered);
     expect(tampered.statusCode).toBe(401);
-    expect(db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(db.fulfillOrder).not.toHaveBeenCalled();
   });
 
   it("rejects signed notifications that do not match the local order", async () => {
@@ -119,7 +119,7 @@ describe("alipay notification", () => {
     const wrongProvider = response();
     await notify(post(signed(paidNotice())), wrongProvider);
     expect(wrongProvider.body).toBe("fail");
-    expect(db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(db.fulfillOrder).not.toHaveBeenCalled();
   });
 
   it("checks the seller when ALIPAY_SELLER_ID is set", async () => {
@@ -133,7 +133,7 @@ describe("alipay notification", () => {
     const res = response();
     await notify(post(signed(paidNotice({ trade_status: "WAIT_BUYER_PAY" }))), res);
     expect(res.body).toBe("success");
-    expect(db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(db.fulfillOrder).not.toHaveBeenCalled();
   });
 
   it("never accepts an Alipay order as a WeChat payment", () => {

@@ -1,9 +1,6 @@
+import { fulfillOrder } from "../../lib/fulfillOrder";
 import { withIronSessionApiRoute } from "../../lib/session";
-import {
-  getOrder,
-  markOrderPaid,
-  updateUserPurchase,
-} from "../../lib/db";
+import { getOrder } from "../../lib/db";
 import { createWxPay, unwrapWxResult } from "../../lib/wxpay";
 import { createAlipay, isAlipayPaidState, queryAlipayTrade, toClientTradeState } from "../../lib/alipay";
 import { consumeRateLimit } from "../../lib/rateLimit";
@@ -73,6 +70,10 @@ async function handler(req, res) {
       return res.status(429).json({ paid: false, message: "查询过于频繁" });
     }
 
+    if (order.provider === "usdt") {
+      return res.status(200).json({ paid: false, state: order.status, cashierUrl: `/pay/usdt?orderId=${encodeURIComponent(order.id)}` });
+    }
+
     // Orders created before Alipay support are WeChat orders.
     const result = order.provider === "alipay" ? await queryAlipay(order) : await queryWechat(order);
     if (!result) {
@@ -83,9 +84,7 @@ async function handler(req, res) {
       return res.status(200).json({ paid: false, state: result.state });
     }
 
-    const granted = await updateUserPurchase(order.email, order.datasetId);
-    if (!granted) throw new Error("购买权限保存失败");
-    await markOrderPaid(orderId, result.transactionId);
+    await fulfillOrder(orderId, result.transactionId);
     return res.status(200).json({ paid: true });
   } catch (error) {
     console.error("[查询报错] 接口异常:", error.message);

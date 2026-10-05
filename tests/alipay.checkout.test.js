@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  db: { getDatasets: vi.fn(), getSiteSettings: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), updateUserPurchase: vi.fn(), markOrderPaid: vi.fn() },
+  db: { getDatasets: vi.fn(), getSiteSettings: vi.fn(), getPurchasedIds: vi.fn(), getOrder: vi.fn(), saveOrder: vi.fn(), fulfillOrder: vi.fn() },
   sdk: { exec: vi.fn(), pageExecute: vi.fn() },
   rate: vi.fn(),
 }));
 vi.mock("../lib/session", () => ({ withIronSessionApiRoute: (handler) => handler }));
+vi.mock("../lib/fulfillOrder", () => ({ fulfillOrder: mocks.db.fulfillOrder }));
 vi.mock("../lib/db", () => mocks.db);
 vi.mock("../lib/rateLimit", () => ({ consumeRateLimit: mocks.rate }));
 vi.mock("../lib/alipay", async (importOriginal) => ({ ...await importOriginal(), createAlipay: () => mocks.sdk }));
@@ -42,7 +43,7 @@ beforeEach(() => {
   mocks.db.getSiteSettings.mockResolvedValue({});
   mocks.db.getPurchasedIds.mockResolvedValue([]);
   mocks.db.getOrder.mockResolvedValue(order);
-  mocks.db.updateUserPurchase.mockResolvedValue(true);
+  mocks.db.fulfillOrder.mockResolvedValue(true);
   mocks.sdk.pageExecute.mockReturnValue("https://openapi.alipay.com/gateway.do?charset=utf-8&sign=test");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -105,7 +106,7 @@ describe("alipay checkout", () => {
     const res = response();
     await checkout(request({ previousOrderId: order.id }), res);
     expect(res.statusCode).toBe(409);
-    expect(mocks.db.updateUserPurchase).toHaveBeenCalledWith(order.email, dataset.id);
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledWith(order.id, paidTrade.tradeNo);
     expect(mocks.db.saveOrder).not.toHaveBeenCalled();
   });
 });
@@ -116,7 +117,7 @@ describe("alipay order query", () => {
     const res = response();
     await checkOrder(queryRequest(), res);
     expect(res.body).toEqual({ paid: true });
-    expect(mocks.db.markOrderPaid).toHaveBeenCalledWith(order.id, paidTrade.tradeNo);
+    expect(mocks.db.fulfillOrder).toHaveBeenCalledWith(order.id, paidTrade.tradeNo);
   });
 
   it("refuses a paid trade whose amount differs", async () => {
@@ -124,7 +125,7 @@ describe("alipay order query", () => {
     const res = response();
     await checkOrder(queryRequest(), res);
     expect(res.statusCode).toBe(409);
-    expect(mocks.db.updateUserPurchase).not.toHaveBeenCalled();
+    expect(mocks.db.fulfillOrder).not.toHaveBeenCalled();
   });
 
   it("maps unpaid states for the payment panel", async () => {
