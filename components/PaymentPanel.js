@@ -4,6 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { consumeWechatPayIntent, getAlipayJumpUrl, getH5JumpUrl, getPaymentClientType, invokeWeChatPay, isPaymentOrderId, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
 import { useSiteSettings } from "../lib/useSiteSettings";
 import styles from "../styles/Detail.module.css";
+import { PaymentCountdown } from './PaymentFeedback';
+import { waitForCheckout } from '../lib/paymentClient';
 
 const subscribe = () => () => {};
 
@@ -62,7 +64,7 @@ function PaymentDialog({ codeUrl, name, price, message, onClose, onCheck }) {
 
 export default function PaymentPanel({ dataset, user, onPaid }) {
   const router = useRouter();
-  const { payments } = useSiteSettings();
+  const { payments, usdtCheckoutWaitSeconds = 5 } = useSiteSettings();
   const methods = payments || { wechat: true, alipay: false };
   const clientType = useSyncExternalStore(subscribe, getPaymentClientType, () => "native");
   const [busy, setBusy] = useState(false);
@@ -74,6 +76,13 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
   const [showQr, setShowQr] = useState(false);
   const [checkVersion, setCheckVersion] = useState(0);
   const checkoutRequest = useRef(null);
+  const [preparing, setPreparing] = useState(null);
+  const cancelPreparing = useCallback(() => {
+    checkoutRequest.current?.abort();
+    checkoutRequest.current = null;
+    setPreparing(null); setBusy(false);
+    setStatus('已取消等待；如订单已创建，可返回收银台继续付款。');
+  }, []);
   const key = user?.email ? `pendingOrder:${encodeURIComponent(user.email.toLowerCase())}:${dataset.id}` : "";
   const returnedOrder = router.query.payOrder;
   const closeQr = useCallback(() => setShowQr(false), []);
@@ -184,6 +193,9 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
     checkoutRequest.current = controller;
     setBusy(true);
     setError("");
+    const seconds = Number.isInteger(Number(usdtCheckoutWaitSeconds)) ? Math.max(0, Math.min(60, Number(usdtCheckoutWaitSeconds))) : 5;
+    const deadline = Date.now() + seconds * 1000;
+    if (provider === 'usdt') setPreparing({ deadline, seconds });
     try {
       let data = provider === "wechat" && payment?.type === (type === "native" ? "qrcode" : type) ? payment : null;
       if (!data) {
@@ -191,11 +203,22 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         // Never offer its cached QR code again if the next request fails.
         setPayment(null);
         setShowQr(false);
-        const res = await fetch("/api/checkout", {
+        const requestOrder = () => fetch("/api/checkout", {
           method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
           body: JSON.stringify({ datasetId: dataset.id, provider, clientType: type, previousOrderId: orderId || undefined }),
         });
+        let res = await requestOrder();
         data = await readCheckoutResponse(res);
+        // This response explicitly guarantees that no invoice was created.
+        // Retry bounded scanner recovery, never ambiguous network failures.
+        for (let attempt = 0; provider === 'usdt' && data.code === 'USDT_SCAN_RECOVERING' && attempt < 2; attempt++) {
+          const retrySeconds = Math.max(30, seconds);
+          const retryDeadline = Date.now() + retrySeconds * 1000;
+          setPreparing({ deadline: retryDeadline, seconds: retrySeconds });
+          await waitForCheckout(retryDeadline, controller.signal);
+          res = await requestOrder();
+          data = await readCheckoutResponse(res);
+        }
         if (controller.signal.aborted) return;
         if (data.needOauth) {
           rememberWechatPayIntent(key);
@@ -220,6 +243,9 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         setPayment(data);
       }
       if (data.type === "usdt") {
+        setCashierOrderId(data.outTradeNo);
+        await waitForCheckout(deadline, controller.signal);
+        if (controller.signal.aborted) return;
         await router.push(`/pay/usdt?orderId=${encodeURIComponent(data.outTradeNo)}`);
       } else if (data.type === "alipay") {
         // Alipay returns to this page with payOrder so polling resumes.
@@ -239,9 +265,9 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
       if (!controller.signal.aborted) setError(err.message || "支付失败，请稍后重试");
     } finally {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
-      if (!controller.signal.aborted) setBusy(false);
+      if (!controller.signal.aborted) { setBusy(false); setPreparing(null); }
     }
-  }, [cashierOrderId, dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn]);
+  }, [cashierOrderId, dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn, usdtCheckoutWaitSeconds]);
 
   useEffect(() => {
     if (!methods.wechat || clientType !== "jsapi" || router.query.wechatPay !== "ready" || !user?.isLoggedIn) return;
@@ -264,6 +290,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
 
   return (
     <>
+      {preparing && <PaymentCountdown deadline={preparing.deadline} seconds={preparing.seconds} onCancel={cancelPreparing}/>}
       <div className={styles.paymentActions}>
         {router.query.wechatPay === "ready" && <p className={styles.paymentStatus}>微信授权已完成，正在继续支付。若未弹出收银台，可点击下方按钮重试。</p>}
         {router.query.wechatPay === "failed" && <p className={styles.paymentError}>微信授权未完成，可重试或使用扫码支付</p>}

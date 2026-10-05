@@ -1,9 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { consumeWechatPayIntent, getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, readCheckoutResponse, rememberWechatPayIntent, safeStorage } from "../lib/paymentClient";
+import { consumeWechatPayIntent, getH5JumpUrl, getLoginReturnPath, getPaymentClientType, invokeWeChatPay, readCheckoutResponse, rememberWechatPayIntent, safeStorage, waitForCheckout } from "../lib/paymentClient";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("payment browser compatibility", () => {
+  it('waits until the checkout deadline before proceeding', async () => {
+    vi.useFakeTimers(); const done = vi.fn();
+    const wait = waitForCheckout(Date.now() + 5000, new AbortController().signal).then(done);
+    await vi.advanceTimersByTimeAsync(4999); expect(done).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); await wait; expect(done).toHaveBeenCalledTimes(1);
+  });
+  it('cancels the countdown without leaving a navigation timer', async () => {
+    vi.useFakeTimers(); const controller = new AbortController();
+    const wait = waitForCheckout(Date.now() + 5000, controller.signal);
+    const cancelled = expect(wait).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort(); await cancelled; expect(vi.getTimerCount()).toBe(0);
+  });
+  it('handles cancellation before the timer is created', async () => {
+    vi.useFakeTimers(); const controller = new AbortController(); controller.abort();
+    await expect(waitForCheckout(Date.now() + 5000, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("preserves the safe merchant permission explanation from checkout", async () => {
     const body = { code: "WECHAT_PAY_NO_AUTH", message: "商家的微信扫码支付权限未开通或不可用，请联系站点管理员。" };
     expect(await readCheckoutResponse(new Response(JSON.stringify(body), { status: 422 }))).toEqual(body);

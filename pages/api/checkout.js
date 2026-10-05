@@ -296,7 +296,8 @@ async function checkoutHandler(req, res) {
         usdt_scan: "正在恢复链上扫描，请等待 30 秒后重试；当前尚未创建支付订单",
         usdt_reserve: "USDT 支付金额暂时无法分配，请稍后重试或联系管理员",
       };
-      return res.status(503).json({ message: messages[stage] || "USDT 收款暂不可用，请稍后重试或选择其他方式" });
+      return res.status(503).json({ message: messages[stage] || "USDT 收款暂不可用，请稍后重试或选择其他方式",
+        ...(stage === 'usdt_scan' ? { code: 'USDT_SCAN_RECOVERING', retryAfter: 30 } : {}) });
     }
     console.error("支付初始化错误:", {
       provider,

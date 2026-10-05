@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import Layout from '../../components/Layout';
 import styles from '../../styles/Usdt.module.css';
+import { CopyToast } from '../../components/PaymentFeedback';
 
 const labels = { pending: '等待支付', confirming: '检测到交易 · 等待区块确认', paid: '支付成功', expired: '订单超时', invalid: '订单已取消', underpaid: '支付金额不足', overpaid: '支付金额超过应付金额' };
 export function UsdtCashier({ order, remaining, addressOnly, setAddressOnly, copy, notice }) {
@@ -12,14 +13,14 @@ export function UsdtCashier({ order, remaining, addressOnly, setAddressOnly, cop
     <p className={styles.status} role="status">{labels[order.status] || order.status}{order.status === 'confirming' && ` · ${order.confirmations}/${order.requiredConfirmations}`}</p>
     {order.status === 'paid' ? <div className={styles.success}><h2>✓ 支付成功</h2><p>购买权限已解锁，即将进入资源页面。</p></div> : <>
       <p>应付金额</p><div className={styles.amount}>{order.amount}<span> USDT</span></div>
-      <button onClick={() => copy(order.amount)} className={styles.button}>复制支付金额</button>
+      <button onClick={() => copy(order.amount, '付款金额')} className={styles.button}>复制支付金额</button>
       <p className={styles.muted}>商品 ¥{order.cnyPrice} · 报价汇率：1 USDT = ¥{order.cnyPerUsdt} · 基础金额 {order.baseAmount} USDT，已加入订单识别尾数</p>
       <p><strong>网络：BNB Smart Chain (BEP-20)</strong></p>
       {order.status === 'pending' && remaining > 0 && <div className={styles.qr}><QRCodeSVG value={addressOnly ? order.address : order.uri} size={224} marginSize={4} title={addressOnly ? 'BSC 收款地址二维码' : 'BSC USDT 支付请求二维码'}/></div>}
       <label className={styles.toggle}><input type="checkbox" checked={addressOnly} onChange={(e) => setAddressOnly(e.target.checked)}/>钱包不识别？改用纯地址二维码</label>
       <p className={styles.muted}>纯地址二维码不包含币种、网络或金额，请逐项核对。无需连接钱包。</p>
       <label>收款钱包地址</label><code className={styles.address}>{order.address}</code>
-      <button onClick={() => copy(order.address)} className={styles.button}>复制钱包地址</button>
+      <button onClick={() => copy(order.address, '钱包地址')} className={styles.button}>复制钱包地址</button>
       <p className={styles.countdown}>{remaining > 0 ? `剩余 ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '付款时间已结束，请勿再转账'}</p>
       <div className={styles.warning}>请务必使用 BNB Smart Chain（BEP-20）网络发送 USDT，并严格按照页面显示的金额付款，否则系统可能无法自动识别订单。<strong>不要使用 TRC20、ERC20、Solana 等其他网络。</strong></div>
       <p className={styles.muted}>平台抽成 0%。链上 Gas 或交易所提币费由付款方承担；请核对最终到账金额。交易所若无法输入 6 位小数，请使用支持该精度的钱包。请勿重复付款。</p>
@@ -36,6 +37,7 @@ export default function UsdtPage() {
   const [order, setOrder] = useState(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [now, setNow] = useState(0), [offset, setOffset] = useState(0), [addressOnly, setAddressOnly] = useState(false);
   const [txHash, setTxHash] = useState(''), [logIndex, setLogIndex] = useState('0');
+  const [copied, setCopied] = useState(null);
   useEffect(() => {
     if (!id) return;
     let stopped = false, timer;
@@ -56,7 +58,10 @@ export default function UsdtPage() {
     return () => { stopped = true; clearTimeout(timer); controller.abort(); };
   }, [id, router]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  const copy = async (text) => { try { await navigator.clipboard.writeText(text); setNotice('已复制'); } catch { setNotice('复制失败，请长按或选中文本复制'); } };
+  const copy = async (text, label) => {
+    try { await navigator.clipboard.writeText(text); setNotice(''); setCopied({ label, dismiss: () => setCopied(null) }); }
+    catch { setCopied(null); setNotice('复制失败，请长按或选中文本复制'); }
+  };
   const action = async (method) => {
     try {
       const res = await fetch(`/api/usdt/order?orderId=${encodeURIComponent(id)}`, { method, headers: { 'Content-Type': 'application/json' },
@@ -65,6 +70,7 @@ export default function UsdtPage() {
     } catch { setNotice('请求失败，请稍后重试'); }
   };
   return <Layout title="USDT 收银台"><main className={styles.page}>
+    {copied && <CopyToast message={copied}/>}
     {error && <p className={styles.warning} role="alert">{error}；请勿重复付款。</p>}
     {order ? <><UsdtCashier order={order} remaining={Math.max(0, Math.ceil((order.expiresAt - now - offset) / 1000))} addressOnly={addressOnly} setAddressOnly={setAddressOnly} copy={copy} notice={notice}/>
       {order.status !== 'paid' && <section className={styles.card}><h2>已转账但金额不一致？</h2><p>提交 Hash 和 Transfer 日志序号供核对。申请不会证明交易归属，也不会自动解锁资源。</p>

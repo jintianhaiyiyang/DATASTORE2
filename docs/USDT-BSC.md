@@ -2,6 +2,8 @@
 
 ## What is implemented
 
+The USDT purchase button immediately opens a countdown dialog while the server prepares the order. Admin → USDT settings → “收银台打开前倒计时” controls the minimum display time (0–60 seconds, default 5), independently of the payment expiry. The cashier opens only after the server returns a valid invoice and the countdown completes. A scanner-recovery response that guarantees no new invoice has been created can be retried twice with a 30-second countdown; ambiguous network failures are never automatically retried. Cancelling aborts waiting; an already-created order remains available to resume. Copying the wallet or amount shows a short success toast only after the Clipboard API succeeds; errors retain a manual-copy instruction. Dialogs support keyboard focus, reduced-motion preferences and mobile viewport limits.
+
 Non-custodial receipt of Binance-Peg USDT on BSC mainnet, chain ID **56**, with no application commission. Every payment goes directly to the configured public wallet. This integration cannot sign transfers, withdraw, sweep or refund. A compromised application can change future payment instructions, but cannot spend existing treasury funds using the configuration here; keep wallet keys completely outside this server. Gas and exchange withdrawal fees still apply to the sender.
 
 Existing architecture: Next.js 16 Pages Router + React 19 + JavaScript, `@vercel/kv` Redis, iron-session, qrcode.react, CSS modules. No SQL migrations or new UI/chain SDK dependencies. `eth_getLogs`, transaction receipts and canonical block headers provide chain evidence; BscScan is only an outbound transaction link.

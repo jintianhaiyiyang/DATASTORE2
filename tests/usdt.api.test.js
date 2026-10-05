@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ getOrder: vi.fn(), kv: { get: vi.fn(), set: vi.fn(), sadd: vi.fn() }, cancel: vi.fn(), scan: vi.fn(), rate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getOrder: vi.fn(), getSettings: vi.fn(), saveSettings: vi.fn(), kv: { get: vi.fn(), set: vi.fn(), sadd: vi.fn() }, cancel: vi.fn(), scan: vi.fn(), rate: vi.fn() }));
 vi.mock('../lib/session', () => ({ withIronSessionApiRoute: (fn) => fn }));
-vi.mock('../lib/db', () => ({ getOrder: mocks.getOrder }));
+vi.mock('../lib/db', () => ({ getOrder: mocks.getOrder, getSiteSettings: mocks.getSettings, saveSiteSettings: mocks.saveSettings }));
 vi.mock('@vercel/kv', () => ({ kv: mocks.kv }));
 vi.mock('../lib/usdt/store', async (original) => ({ ...await original(), cancelOrder: mocks.cancel }));
 vi.mock('../lib/usdt/scanner', () => ({ scanPayments: mocks.scan }));
@@ -12,7 +12,7 @@ import adminApi from '../pages/api/admin/usdt';
 const order = { id: 'ORDER_usdt123', email: 'buyer@example.test', provider: 'usdt', datasetId: 'dataset1', status: 'pending', address: `0x${'1'.repeat(40)}`, token: `0x${'2'.repeat(40)}`, expectedAtomic: '10000137000000000000', baseAtomic: '10000000000000000000', expiresAt: Date.now() + 900000, requiredConfirmations: 20 };
 const req = () => ({ method: 'GET', headers: { origin: 'https://shop.example', host: 'shop.example' }, query: { orderId: order.id }, session: { user: { isLoggedIn: true, email: order.email } } });
 const res = () => ({ statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(data) { this.body = data; return this; }, end() { return this; } });
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv('NEXT_PUBLIC_SITE_URL','https://shop.example'); mocks.getOrder.mockResolvedValue(order); mocks.rate.mockResolvedValue({ allowed: true }); });
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv('NEXT_PUBLIC_SITE_URL','https://shop.example'); mocks.getSettings.mockResolvedValue({}); mocks.getOrder.mockResolvedValue(order); mocks.rate.mockResolvedValue({ allowed: true }); });
 afterEach(() => vi.unstubAllEnvs());
 describe('USDT API trust boundaries', () => {
   it('requires login and exact order ownership', async () => {
@@ -54,6 +54,21 @@ describe('USDT API trust boundaries', () => {
   });
   it('denies non-admin access to transactions and configuration', async () => {
     const response = res(); await adminApi(req(), response); expect(response.statusCode).toBe(403);
+  });
+  it.each([0, 5, 60])('persists admin countdown %s independently of payment timeout', async (seconds) => {
+    vi.stubEnv('BSC_RPC_URL', 'https://rpc.example.test');
+    const request = req(); request.method = 'PUT'; request.session.user.isAdmin = true;
+    request.body = { enabled: true, address: order.address, token: '0x55d398326f99059ff775485246999027b3197955', rate: '7', confirmations: 20, timeoutMinutes: 15, tailMax: 9999, waitSeconds: String(seconds) };
+    mocks.saveSettings.mockImplementation(async (settings) => settings);
+    const response = res(); await adminApi(request, response);
+    expect(response.statusCode).toBe(200); expect(response.body.config.waitSeconds).toBe(seconds);
+    expect(mocks.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ usdtCheckoutWaitSeconds: seconds, usdtTimeoutMinutes: 15 }));
+  });
+  it.each([-1, 61, '1.5', 'oops'])('rejects invalid admin countdown %s without saving', async (seconds) => {
+    const request = req(); request.method = 'PUT'; request.session.user.isAdmin = true;
+    request.body = { enabled: true, waitSeconds: seconds };
+    const response = res(); await adminApi(request, response);
+    expect(response.statusCode).toBe(400); expect(mocks.saveSettings).not.toHaveBeenCalled();
   });
   it('recovers a missed scan and returns freshly verified paid status', async () => {
     mocks.kv.set.mockResolvedValue('OK');
