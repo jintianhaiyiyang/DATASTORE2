@@ -6,6 +6,25 @@ import { requireSameOrigin, hashKey } from '../../../lib/security';
 import { consumeRateLimit } from '../../../lib/rateLimit';
 import { formatUnits, paymentUri } from '../../../lib/usdt/amount';
 import { cancelOrder, txKey } from '../../../lib/usdt/store';
+import { scanPayments } from '../../../lib/usdt/scanner';
+
+export const config = { maxDuration: 60 };
+
+// A live cashier can recover a missed scheduler invocation. This gate is
+// shared by all users/instances; the scanner also holds its fenced lease.
+async function scanForCashier(order) {
+  if (!['pending', 'confirming', 'expired'].includes(order.status) || order.cancelledAt ||
+      Date.now() > order.expiresAt + 86400000) return false;
+  try {
+    if (!await kv.set('usdt:cashier:scan', '1', { nx: true, ex: 30 })) return false;
+    await scanPayments();
+    return true;
+  } catch {
+    // Preserve readable order status on RPC outages. The scanner logs its
+    // own sanitized failure and retains its cursor for the next attempt.
+    return true;
+  }
+}
 
 export function presentOrder(order, now = Date.now()) {
   return { id: order.id, datasetId: order.datasetId,
@@ -48,7 +67,8 @@ async function handler(req, res) {
       return res.status(200).json({ state, actualAmount: formatUnits(tx.actualAtomic),
         message: `${state === 'underpaid' ? '支付金额不足' : state === 'overpaid' ? '支付金额超过应付金额' : '交易待核对'}。已记录你的查询申请；交易归属需管理员核实，不会自动退款或解锁。` });
     }
-    return res.status(200).json(presentOrder(order));
+    const scanned = await scanForCashier(order);
+    return res.status(200).json(presentOrder(scanned ? await getOrder(id) || order : order));
   } catch { return res.status(503).json({ message: '订单查询暂不可用，请稍后重试' }); }
 }
 export default withIronSessionApiRoute(handler);
