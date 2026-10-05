@@ -31,7 +31,7 @@ export default function UsdtAdmin() {
       <p>资金直接进入你的钱包，平台抽成 0%。这里只配置公开收款信息，绝不填写钱包私钥或助记词。</p>
       <form onSubmit={(e) => { e.preventDefault(); void send('PUT', form); }}>
         <label>收银台打开前倒计时（秒，0–60）<input type="number" min="0" max="60" step="1" required value={form.waitSeconds ?? 5} onChange={(e) => setForm({ ...form, waitSeconds: e.target.value })}/></label>
-        <p className={styles.muted}>默认 5 秒。设为 0 则只显示订单准备状态；不改变订单的付款有效期。</p>
+        <p className={styles.muted}>默认 5 秒，作为准备进度提示。订单提前准备成功就立即打开，无需等倒计时结束。设为 0 则只显示准备状态；不改变付款有效期。</p>
         <label className={styles.toggle}><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })}/>启用 USDT (BEP-20 / BNB Smart Chain)</label>
         {fields.map(([key, label]) => <label key={key}>{label}<input required value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/></label>)}
         <p className={styles.muted}>尾数按报价递增，永久保留、不自动回收，避免迟到和重复付款误匹配。用尽后停止创建该报价的订单。修改汇率不影响旧订单。</p>

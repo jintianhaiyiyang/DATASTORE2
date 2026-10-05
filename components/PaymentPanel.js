@@ -244,7 +244,6 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
       }
       if (data.type === "usdt") {
         setCashierOrderId(data.outTradeNo);
-        await waitForCheckout(deadline, controller.signal);
         if (controller.signal.aborted) return;
         await router.push(`/pay/usdt?orderId=${encodeURIComponent(data.outTradeNo)}`);
       } else if (data.type === "alipay") {
