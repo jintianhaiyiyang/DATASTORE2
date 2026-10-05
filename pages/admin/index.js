@@ -1,3 +1,4 @@
+import UsdtAdmin from "../../components/UsdtAdmin";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import Image from "next/image";
@@ -197,6 +198,8 @@ export default function AdminPage() {
             <p className={styles.loading}>正在加载站点设置...</p>
           ) : tab === "announcement" ? (
             <AnnouncementSection siteSettings={siteSettings} setSiteSettings={setSiteSettings} />
+          ) : tab === "usdt" ? (
+            <UsdtAdmin />
           ) : tab === "payment" ? (
             <PaymentSection siteSettings={siteSettings} setSiteSettings={setSiteSettings} />
           ) : (
@@ -213,6 +216,7 @@ const TABS = [
   { key: "article", label: "文章" },
   { key: "announcement", label: "公告" },
   { key: "payment", label: "支付" },
+  { key: "usdt", label: "USDT 交易与设置" },
   { key: "site", label: "站点设置" },
 ];
 

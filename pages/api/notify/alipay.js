@@ -1,4 +1,5 @@
-import { getOrder, markOrderPaid, updateUserPurchase } from "../../../lib/db";
+import { fulfillOrder } from "../../../lib/fulfillOrder";
+import { getOrder } from "../../../lib/db";
 import { createAlipay, isAlipayPaidState } from "../../../lib/alipay";
 import { validateAlipayPaidOrder } from "../../../lib/orderValidation";
 import { readRawBody } from "../../../lib/rawBody";
@@ -45,9 +46,7 @@ export default async function alipayNotify(req, res) {
         return reply(res, 409, "fail");
       }
       if (order.status !== "paid") {
-        const granted = await updateUserPurchase(order.email, order.datasetId);
-        if (!granted) throw new Error("购买权限保存失败");
-        await markOrderPaid(order.id, params.trade_no);
+        await fulfillOrder(order.id, params.trade_no);
       }
     }
 

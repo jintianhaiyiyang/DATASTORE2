@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "check": "npm run lint && npm run test && npm run build"
+    "check": "npm run lint && npm run test && npm run build",
+    "test:usdt:redis": "node scripts/test-usdt-redis.mjs",
+    "usdt:worker": "node scripts/usdt-worker.mjs"
   },
   "engines": {
     "node": ">=20.9.0"

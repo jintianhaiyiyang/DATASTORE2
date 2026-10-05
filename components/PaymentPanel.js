@@ -70,6 +70,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
   const [status, setStatus] = useState("");
   const [payment, setPayment] = useState(null);
   const [orderId, setOrderId] = useState("");
+  const [cashierOrderId, setCashierOrderId] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [checkVersion, setCheckVersion] = useState(0);
   const checkoutRequest = useRef(null);
@@ -128,7 +129,8 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
           catch { if (!controller.signal.aborted) setStatus("付款已确认，请刷新页面获取下载链接"); }
           return;
         }
-        if ([400, 401, 403, 404, 409].includes(res.status) || ["CLOSED", "REVOKED", "PAYERROR", "REFUND"].includes(data.state)) {
+        if (res.ok && data.cashierUrl) { setCashierOrderId(orderId); }
+        if ([400, 401, 403, 404, 409].includes(res.status) || ["CLOSED", "REVOKED", "PAYERROR", "REFUND", "expired", "invalid"].includes(data.state)) {
           stopped = true;
           if (res.status !== 401 && res.status !== 409) forget();
           setOrderId("");
@@ -143,7 +145,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         } else if (!res.ok) {
           delay = 10000;
           setStatus("暂时无法确认结果，将自动重试，请勿重复付款");
-        } else setStatus("等待支付确认，完成后自动解锁");
+        } else setStatus(data.cashierUrl ? "USDT 订单待确认，可重新进入收银台查看" : "等待支付确认，完成后自动解锁");
       } catch {
         if (!controller.signal.aborted) setStatus("网络暂时中断，恢复后会继续确认支付");
         delay = 10000;
@@ -170,6 +172,10 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
 
   const buy = useCallback(async (type, provider = "wechat") => {
     if (checkoutRequest.current) return;
+    if (provider === "usdt" && orderId && cashierOrderId === orderId) {
+      await router.push(`/pay/usdt?orderId=${encodeURIComponent(orderId)}`);
+      return;
+    }
     if (!user?.isLoggedIn) {
       await router.push(`/login?next=${encodeURIComponent(router.asPath)}`);
       return;
@@ -210,10 +216,12 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         if (data.type === "h5") getH5JumpUrl(data.mwebUrl, window.location.href, data.outTradeNo);
         if (data.type === "alipay") getAlipayJumpUrl(data.payUrl);
         if ((data.type === "qrcode" && !data.codeUrl) || (data.type === "jsapi" && !data.payParams) ||
-            !["qrcode", "h5", "jsapi", "alipay"].includes(data.type)) throw new Error("支付参数不完整，请稍后重试");
+            !["qrcode", "h5", "jsapi", "alipay", "usdt"].includes(data.type)) throw new Error("支付参数不完整，请稍后重试");
         setPayment(data);
       }
-      if (data.type === "alipay") {
+      if (data.type === "usdt") {
+        await router.push(`/pay/usdt?orderId=${encodeURIComponent(data.outTradeNo)}`);
+      } else if (data.type === "alipay") {
         // Alipay returns to this page with payOrder so polling resumes.
         window.location.assign(getAlipayJumpUrl(data.payUrl));
       } else if (data.type === "qrcode" && data.codeUrl) {
@@ -233,7 +241,7 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
-  }, [dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn]);
+  }, [cashierOrderId, dataset.id, key, onPaid, orderId, payment, router, user?.isLoggedIn]);
 
   useEffect(() => {
     if (!methods.wechat || clientType !== "jsapi" || router.query.wechatPay !== "ready" || !user?.isLoggedIn) return;
@@ -271,10 +279,12 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
           </button>
         )}
         {methods.wechat && clientType !== "native" && <button type="button" onClick={() => buy("native")} disabled={busy} className={styles.secondaryPayBtn}>显示微信支付二维码</button>}
-        {!methods.wechat && !methods.alipay && (
+        {methods.usdt && <button type="button" onClick={() => buy("bep20", "usdt")} disabled={busy} className={styles.secondaryPayBtn}>USDT (BEP-20 / BNB Smart Chain)</button>}
+        {!methods.wechat && !methods.alipay && !methods.usdt && (
           <p className={styles.paymentStatus}>暂未开放在线支付，请联系站点管理员。</p>
         )}
         {status && <p className={styles.paymentStatus} role="status">{status}</p>}
+        {orderId && cashierOrderId === orderId && <button type="button" className={styles.checkBtn} onClick={() => router.push(`/pay/usdt?orderId=${encodeURIComponent(orderId)}`)}>返回 USDT 收银台</button>}
         {orderId && <button type="button" className={styles.checkBtn} onClick={() => setCheckVersion((version) => version + 1)}>检查支付结果</button>}
       </div>
       {showQr && payment?.codeUrl && <PaymentDialog codeUrl={payment.codeUrl} name={dataset.name} price={dataset.price} message={status} onClose={closeQr} onCheck={() => setCheckVersion((version) => version + 1)} />}
