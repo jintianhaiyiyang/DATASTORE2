@@ -14,5 +14,14 @@ export const redis = {
   eval: (script, keys, args) => command('EVAL', script, keys.length, ...keys, ...args),
   incr: (key) => command('INCR', key), del: (...keys) => command('DEL', ...keys),
   sadd: (key, ...values) => command('SADD', key, ...values), smembers: (key) => command('SMEMBERS', key),
+  // List/hash reads decode JSON values like @vercel/kv's automatic deserialization.
+  rpush: (key, ...values) => command('RPUSH', key, ...values), llen: (key) => command('LLEN', key),
+  lindex: async (key, index) => decode(await command('LINDEX', key, index)),
+  lrange: async (key, start, end) => (await command('LRANGE', key, start, end)).map(decode),
+  hgetall: async (key) => {
+    const flat = await command('HGETALL', key);
+    const pairs = Array.isArray(flat) ? flat.reduce((all, value, i) => (i % 2 ? all : [...all, [value, flat[i + 1]]]), []) : Object.entries(flat || {});
+    return pairs.length ? Object.fromEntries(pairs.map(([k, v]) => [k, decode(v)])) : null;
+  },
   zrange: (key, start, end, options = {}) => command('ZRANGE', key, start, end, ...(options.byScore ? ['BYSCORE'] : []), ...(options.rev ? ['REV'] : []), ...(options.count ? ['LIMIT', options.offset || 0, options.count] : [])),
 };

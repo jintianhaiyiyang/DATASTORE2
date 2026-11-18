@@ -5,6 +5,7 @@ import { reserveOrder, cancelOrder } from "../../lib/usdt/store";
 import { fulfillOrder } from "../../lib/fulfillOrder";
 import { withIronSessionApiRoute } from "../../lib/session";
 import { getDatasets, getPurchasedIds, getOrder, getSiteSettings, saveOrder } from "../../lib/db";
+import { getStockCount, isStockMode } from "../../lib/digital";
 import { isOrderOwner, parsePaymentAttach, validateAlipayPaidOrder, validatePaidOrder } from "../../lib/orderValidation";
 import { createWxPay, getJsapiPayParams, truncateUtf8, unwrapWxResult } from "../../lib/wxpay";
 import { alipaySubject, closeAlipayTrade, createAlipay, createAlipayPayUrl, isAlipayPaidState, queryAlipayTrade } from "../../lib/alipay";
@@ -117,9 +118,15 @@ async function checkoutHandler(req, res) {
     }
 
     const email = normalizeEmail(user.email);
-    const purchasedIds = await getPurchasedIds(email);
+    // Stock-mode digital goods (accounts, card keys…) can be bought again;
+    // every paid order receives its own item.
+    const repeatable = isStockMode(dataset);
+    const purchasedIds = repeatable ? [] : await getPurchasedIds(email);
     if (purchasedIds.includes(String(dataset.id))) {
       return res.status(409).json({ message: "你已购买该资源，请直接下载" });
+    }
+    if (repeatable && await getStockCount(dataset.id) < 1) {
+      return res.status(410).json({ code: "SOLD_OUT", message: "该商品已售罄，请等待补货" });
     }
 
     const rate = await consumeRateLimit(
@@ -184,10 +191,14 @@ async function checkoutHandler(req, res) {
       if (!isOrderOwner(previous, email) || previous.datasetId !== String(dataset.id)) {
         return res.status(404).json({ message: "原订单不存在，请刷新页面重试" });
       }
-      if (previous.status === "paid") return res.status(409).json(ALREADY_PAID.body);
-      stage = "settle_previous";
-      const outcome = await settlePreviousOrder(previous);
-      if (outcome) return res.status(outcome.status).json(outcome.body);
+      if (previous.status === "paid") {
+        // A settled order of a repeatable product needs no further handling.
+        if (!repeatable) return res.status(409).json(ALREADY_PAID.body);
+      } else {
+        stage = "settle_previous";
+        const outcome = await settlePreviousOrder(previous);
+        if (outcome) return res.status(outcome.status).json(outcome.body);
+      }
     }
 
     if (provider === "usdt") {
@@ -199,7 +210,7 @@ async function checkoutHandler(req, res) {
       await ensureCheckoutScan(config, rpc.head);
       // A recovery scan may have settled a previous purchase while this
       // request waited. Avoid issuing another invoice for that resource.
-      if ((await getPurchasedIds(email)).includes(String(dataset.id))) return res.status(409).json(ALREADY_PAID.body);
+      if (!repeatable && (await getPurchasedIds(email)).includes(String(dataset.id))) return res.status(409).json(ALREADY_PAID.body);
       stage = "usdt_reserve";
       await reserveOrder({ id: outTradeNo, datasetId: String(dataset.id), email,
         cnyPrice: String(dataset.price), clientType: "bep20" }, config, rpc.head);

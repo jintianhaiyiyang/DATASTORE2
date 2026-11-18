@@ -534,3 +534,8 @@
     padding: 20px;
   }
 }
+
+.purchasedBtn {
+  width: 100%;
+  margin-bottom: 14px;
+}

@@ -62,7 +62,7 @@ function PaymentDialog({ codeUrl, name, price, message, onClose, onCheck }) {
   );
 }
 
-export default function PaymentPanel({ dataset, user, onPaid }) {
+export default function PaymentPanel({ dataset, user, onPaid, soldOut = false }) {
   const router = useRouter();
   const { payments, usdtCheckoutWaitSeconds = 5 } = useSiteSettings();
   const methods = payments || { wechat: true, alipay: false };
@@ -133,9 +133,12 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
           stopped = true;
           forget();
           setShowQr(false);
-          setStatus("支付成功，正在解锁下载");
-          try { await onPaid(); }
-          catch { if (!controller.signal.aborted) setStatus("付款已确认，请刷新页面获取下载链接"); }
+          setStatus("支付成功，正在获取购买内容");
+          try { await onPaid(orderId); if (!controller.signal.aborted) setStatus(""); }
+          catch { if (!controller.signal.aborted) setStatus("付款已确认，请刷新页面获取购买内容"); }
+          // Repeatable products keep this panel mounted: the next purchase
+          // must start a fresh order instead of resuming the settled one.
+          setOrderId(""); setCashierOrderId(""); setPayment(null);
           return;
         }
         if (res.ok && data.cashierUrl) { setCashierOrderId(orderId); }
@@ -294,19 +297,21 @@ export default function PaymentPanel({ dataset, user, onPaid }) {
         {router.query.wechatPay === "ready" && <p className={styles.paymentStatus}>微信授权已完成，正在继续支付。若未弹出收银台，可点击下方按钮重试。</p>}
         {router.query.wechatPay === "failed" && <p className={styles.paymentError}>微信授权未完成，可重试或使用扫码支付</p>}
         {error && <p className={styles.paymentError} role="alert">{error}</p>}
-        {methods.wechat && (
+        {/* A sold-out panel stays mounted so a pending order is still confirmed. */}
+        {soldOut && <p className={styles.paymentStatus}>该商品暂时售罄，请等待补货</p>}
+        {!soldOut && methods.wechat && (
           <button type="button" onClick={() => buy(clientType)} disabled={busy} className={styles.wechatBtn}>
             {busy ? "正在连接…" : clientType === "native" ? "微信扫码支付" : "微信支付"}
           </button>
         )}
-        {methods.alipay && (
+        {!soldOut && methods.alipay && (
           <button type="button" onClick={payWithAlipay} disabled={busy} className={styles.alipayBtn}>
             {busy ? "正在连接…" : "支付宝支付"}
           </button>
         )}
-        {methods.wechat && clientType !== "native" && <button type="button" onClick={() => buy("native")} disabled={busy} className={styles.secondaryPayBtn}>显示微信支付二维码</button>}
-        {methods.usdt && <button type="button" onClick={() => buy("bep20", "usdt")} disabled={busy} className={styles.secondaryPayBtn}>USDT (BEP-20 / BNB Smart Chain)</button>}
-        {!methods.wechat && !methods.alipay && !methods.usdt && (
+        {!soldOut && methods.wechat && clientType !== "native" && <button type="button" onClick={() => buy("native")} disabled={busy} className={styles.secondaryPayBtn}>显示微信支付二维码</button>}
+        {!soldOut && methods.usdt && <button type="button" onClick={() => buy("bep20", "usdt")} disabled={busy} className={styles.secondaryPayBtn}>USDT (BEP-20 / BNB Smart Chain)</button>}
+        {!soldOut && !methods.wechat && !methods.alipay && !methods.usdt && (
           <p className={styles.paymentStatus}>暂未开放在线支付，请联系站点管理员。</p>
         )}
         {status && <p className={styles.paymentStatus} role="status">{status}</p>}
