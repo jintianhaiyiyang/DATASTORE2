@@ -7,12 +7,7 @@ import {
   sanitizeRichText,
 } from "../../../lib/content";
 import { randomId, requireSameOrigin } from "../../../lib/security";
-
-function hasPurchased(purchasedIds, datasetId) {
-  if (!Array.isArray(purchasedIds)) return false;
-  const target = String(datasetId);
-  return purchasedIds.map(String).includes(target);
-}
+import { getStockCounts, isStockMode, parseDigitalFields, presentDataset } from "../../../lib/digital";
 
 async function handler(req, res) {
   const sessionUser = req.session.user;
@@ -29,30 +24,13 @@ async function handler(req, res) {
         purchasedIds = await getPurchasedIds(sessionUser.email);
       }
 
-      const processedDatasets = datasets.map((d) => {
-        const isPaid = isLoggedIn && hasPurchased(purchasedIds, d.id);
-        const isFree = Number(d.price) === 0;
-        const hasAccess = isPaid || isFree || isAdmin;
-
-        const { baiduLink, downloadUrl, ...rest } = d;
-        const realLink = baiduLink || downloadUrl;
-
-        // Admins get the real link for editing; buyers/free users get downloadUrl only
-        if (isAdmin) {
-          return {
-            ...rest,
-            isPaid: true,
-            baiduLink: realLink || null,
-            downloadUrl: realLink || null,
-          };
-        }
-
-        return {
-          ...rest,
-          isPaid: hasAccess,
-          downloadUrl: hasAccess ? realLink : null,
-        };
-      });
+      const purchased = new Set(purchasedIds.map(String));
+      const stockCounts = await getStockCounts(datasets.filter(isStockMode).map((d) => String(d.id)));
+      const processedDatasets = datasets.map((d) => presentDataset(d, {
+        isAdmin,
+        purchased: isLoggedIn && purchased.has(String(d.id)),
+        stockCount: stockCounts[String(d.id)],
+      }));
 
       return res.status(200).json(processedDatasets);
     } catch (error) {
@@ -69,13 +47,16 @@ async function handler(req, res) {
 
     const { name, description, richContent, price, tags, baiduLink } =
       req.body || {};
+    const digital = parseDigitalFields(req.body || {});
+    if (digital.error) return res.status(400).json({ message: digital.error });
+    const isDigitalItem = digital.patch.category === "digital";
 
     const safeName = cleanText(name, 120);
     const safeLink = String(baiduLink || "").trim();
-    if (!safeName || !safeLink) {
+    if (!safeName || (!safeLink && !isDigitalItem)) {
       return res.status(400).json({ message: "名称和下载链接是必填项" });
     }
-    if (!isHttpUrl(safeLink)) {
+    if (safeLink && !isHttpUrl(safeLink)) {
       return res.status(400).json({ message: "下载链接必须是有效的 HTTPS 地址" });
     }
 
@@ -99,15 +80,17 @@ async function handler(req, res) {
       richContent: sanitizeRichText(richContent),
       price: parsedPrice,
       currency: "CNY",
-      baiduLink: safeLink,
-      downloadUrl: safeLink,
+      baiduLink: safeLink || null,
+      downloadUrl: safeLink || null,
       tags: cleanTags(tags),
+      category: "dataset",
+      ...digital.patch,
       createdAt: new Date().toISOString(),
     };
 
     try {
-      await saveDataset(newDataset);
-      return res.status(201).json(newDataset);
+      const saved = await saveDataset(newDataset);
+      return res.status(201).json(saved);
     } catch (error) {
       console.error("发布数据集失败:", error);
       return res.status(500).json({ message: "发布失败，请重试" });

@@ -74,15 +74,21 @@ export default function HomePage() {
     return articleFuse.search(searchTerm).map((r) => r.item);
   }, [searchTerm, articleFuse, articles]);
 
-  const filteredDatasets = useMemo(() => {
+  const matchedProducts = useMemo(() => {
     if (!searchTerm) return datasets;
     return datasetFuse.search(searchTerm).map((r) => r.item);
   }, [searchTerm, datasetFuse, datasets]);
+  const isDigital = (d) => d.category === "digital";
+  const filteredDatasets = useMemo(() => matchedProducts.filter((d) => !isDigital(d)), [matchedProducts]);
+  const filteredDigital = useMemo(() => matchedProducts.filter(isDigital), [matchedProducts]);
+  const digitalCount = useMemo(() => datasets.filter(isDigital).length, [datasets]);
 
   const showDatasets = activeTab === "all" || activeTab === "dataset";
+  const showDigital = activeTab === "all" || activeTab === "digital";
   const showArticles = activeTab === "all" || activeTab === "article";
   const totalCount =
     (showDatasets ? filteredDatasets.length : 0) +
+    (showDigital ? filteredDigital.length : 0) +
     (showArticles ? filteredArticles.length : 0);
 
   const formatPrice = (price) => {
@@ -120,8 +126,13 @@ export default function HomePage() {
             </p>
             <div className={styles.stats}>
               <div className={styles.stat}>
-                <strong>{loading ? "–" : datasets.length}</strong>
+                <strong>{loading ? "–" : datasets.length - digitalCount}</strong>
                 <span>数据集</span>
+              </div>
+              <div className={styles.statDivider} />
+              <div className={styles.stat}>
+                <strong>{loading ? "–" : digitalCount}</strong>
+                <span>数字商品</span>
               </div>
               <div className={styles.statDivider} />
               <div className={styles.stat}>
@@ -143,7 +154,7 @@ export default function HomePage() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索数据集、文章..."
+                placeholder="搜索数据集、数字商品、文章..."
                 aria-label="搜索"
               />
             </div>
@@ -151,6 +162,7 @@ export default function HomePage() {
               {[
                 { key: "all", label: "全部" },
                 { key: "dataset", label: "数据集" },
+                { key: "digital", label: "数字商品" },
                 { key: "article", label: "文章" },
               ].map((tab) => (
                 <button
@@ -199,6 +211,43 @@ export default function HomePage() {
                           {price.text}
                         </span>
                         <span className={styles.action}>查看详情</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {showDigital && filteredDigital.length > 0 && (
+            <section className={styles.section}>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>
+                  <span className={`${styles.sectionDot} ${styles.sectionDotDigital}`} />
+                  数字商品
+                </h2>
+                <span className={styles.sectionCount}>{filteredDigital.length} 件</span>
+              </div>
+              <div className={styles.grid}>
+                {filteredDigital.map((d) => {
+                  const price = formatPrice(d.price);
+                  const stock = d.deliveryMode === "stock";
+                  const soldOut = stock && !(Number(d.stockCount) > 0);
+                  return (
+                    <Link href={`/dataset/${encodeURIComponent(d.id)}`} key={d.id} className={styles.card}>
+                      <div className={styles.cardTop}>
+                        <span className={`${styles.badge} ${styles.badgeDigital}`}>数字商品</span>
+                        <span className={soldOut ? styles.stockOut : styles.meta}>
+                          {stock ? (soldOut ? "已售罄" : `库存 ${d.stockCount}`) : "自动发货"}
+                        </span>
+                      </div>
+                      <h3 className={styles.cardTitle}>{d.name}</h3>
+                      <p className={styles.cardDesc}>{d.description || "暂无描述"}</p>
+                      <div className={styles.cardFooter}>
+                        <span className={price.free ? styles.priceFree : styles.price}>
+                          {price.text}
+                        </span>
+                        <span className={styles.action}>{soldOut ? "查看详情" : "立即购买"}</span>
                       </div>
                     </Link>
                   );

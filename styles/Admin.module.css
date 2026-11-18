@@ -630,3 +630,18 @@
     flex-basis: calc(100% - 58px);
   }
 }
+
+.stockList {
+  margin-top: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

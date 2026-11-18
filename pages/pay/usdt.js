@@ -11,7 +11,7 @@ export function UsdtCashier({ order, remaining, addressOnly, setAddressOnly, cop
   return <section className={styles.card}>
     <div className={styles.heading}><svg aria-label="USDT" role="img" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="22" fill="#26a17b"/><path fill="white" d="M10 10h24v5H25v4c6 .3 10 1.2 10 2.7s-4 2.6-10 2.8V35h-6V24.5C13 24.3 9 23.2 9 21.7S13 19.3 19 19v-4h-9zm9 10.5c-4 .2-7 1-7 1.2 0 .6 5 1.4 10 1.4s10-.8 10-1.4c0-.2-3-1-7-1.2v1.7h-6z"/></svg><div><h1>USDT 收银台</h1><p>USDT (BEP-20 / BNB Smart Chain)</p></div></div>
     <p className={styles.status} role="status">{labels[order.status] || order.status}{order.status === 'confirming' && ` · ${order.confirmations}/${order.requiredConfirmations}`}</p>
-    {order.status === 'paid' ? <div className={styles.success}><h2>✓ 支付成功</h2><p>购买权限已解锁，即将进入资源页面。</p></div> : <>
+    {order.status === 'paid' ? <div className={styles.success}><h2>✓ 支付成功</h2><p>购买已完成，即将返回商品页面查看。</p></div> : <>
       <p>应付金额</p><div className={styles.amount}>{order.amount}<span> USDT</span></div>
       <button onClick={() => copy(order.amount, '付款金额')} className={styles.button}>复制支付金额</button>
       <p className={styles.muted}>商品 ¥{order.cnyPrice} · 报价汇率：1 USDT = ¥{order.cnyPerUsdt} · 基础金额 {order.baseAmount} USDT，已加入订单识别尾数</p>
@@ -50,7 +50,7 @@ export default function UsdtPage() {
         if (res.status === 401) { await router.replace(`/login?next=${encodeURIComponent(router.asPath)}`); return; }
         if (!res.ok) throw new Error(data.message || '查询失败');
         setOrder(data); setError(''); setOffset(data.serverNow - Date.now()); setNow(Date.now());
-        if (data.status === 'paid') { timer = setTimeout(() => router.replace(`/dataset/${encodeURIComponent(data.datasetId)}`), 2500); return; }
+        if (data.status === 'paid') { timer = setTimeout(() => router.replace(`/dataset/${encodeURIComponent(data.datasetId)}?payOrder=${encodeURIComponent(id)}`), 2500); return; }
       } catch (err) { if (!stopped) setError(err.message || '查询暂时中断，将自动重试'); }
       if (!stopped) timer = setTimeout(poll, 5000);
     };

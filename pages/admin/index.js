@@ -160,7 +160,7 @@ export default function AdminPage() {
             <div>
               <h1 className={styles.title}>内容管理</h1>
               <p className={styles.subtitle}>
-                当前账号：{user?.username} · 共 {datasets.length} 个数据集、{articles.length} 篇文章
+                当前账号：{user?.username} · 共 {datasets.length} 个数据集/商品、{articles.length} 篇文章
               </p>
             </div>
           </div>
@@ -212,7 +212,7 @@ export default function AdminPage() {
 }
 
 const TABS = [
-  { key: "dataset", label: "数据集" },
+  { key: "dataset", label: "数据集 / 数字商品" },
   { key: "article", label: "文章" },
   { key: "announcement", label: "公告" },
   { key: "payment", label: "支付" },
@@ -594,12 +594,15 @@ function DatasetAdminSection({ datasets, editingDataset, setEditingDataset, refr
       />
       <Notice text={notice} />
       <ItemList
-        title="已发布数据集"
-        emptyText="还没有数据集，使用上方表单发布第一个。"
+        title="已发布数据集与数字商品"
+        emptyText="还没有内容，使用上方表单发布第一个。"
         items={datasets}
         editingId={editingDataset?.id}
         getTitle={(d) => d.name}
-        getMeta={(d) => [formatPrice(d.price), formatDate(d.createdAt), ...(d.tags || [])].filter(Boolean).join(" · ")}
+        getMeta={(d) => [
+          d.category === "digital" ? (d.deliveryMode === "stock" ? `数字商品 · 库存 ${d.stockCount ?? 0}` : "数字商品 · 固定内容") : "数据集",
+          formatPrice(d.price), formatDate(d.createdAt), ...(d.tags || []),
+        ].filter(Boolean).join(" · ")}
         viewHref={(d) => `/dataset/${encodeURIComponent(d.id)}`}
         deleteUrl={(d) => `/api/datasets/${encodeURIComponent(d.id)}`}
         onEdit={setEditingDataset}
@@ -622,7 +625,13 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
     price: editingDataset?.price ?? "",
     baiduLink: editingDataset?.baiduLink || editingDataset?.downloadUrl || "",
     tags: Array.isArray(editingDataset?.tags) ? editingDataset.tags.join(", ") : "",
+    category: editingDataset?.category === "digital" ? "digital" : "dataset",
+    deliveryMode: editingDataset?.deliveryMode === "stock" ? "stock" : "fixed",
+    deliveryContent: editingDataset?.deliveryContent || "",
+    initialStock: "",
   });
+  const digital = form.category === "digital";
+  const stockMode = digital && form.deliveryMode === "stock";
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
@@ -634,23 +643,34 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
     setMsg("");
     try {
       const url = isEdit ? `/api/datasets/${encodeURIComponent(editingDataset.id)}` : "/api/datasets";
+      const { initialStock, ...fields } = form;
       const res = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          ...fields,
           price: Number(form.price || 0),
           tags: splitTags(form.tags),
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         setMsg(data.message || "保存失败");
         setSaving(false);
         return;
       }
-      if (!isEdit) setForm({ name: "", description: "", richContent: "", price: "", baiduLink: "", tags: "" });
-      await onSaved(isEdit ? "修改已保存" : "数据集已发布");
+      let stockNote = "";
+      if (!isEdit && stockMode && initialStock.trim() && data.id) {
+        const stockRes = await fetch("/api/admin/stock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ datasetId: data.id, items: initialStock }),
+        });
+        const stockData = await stockRes.json().catch(() => ({}));
+        stockNote = stockRes.ok ? `，已添加 ${stockData.added} 条库存` : `，但库存添加失败：${stockData.message || "请在编辑页重试"}`;
+      }
+      if (!isEdit) setForm((prev) => ({ ...prev, name: "", description: "", richContent: "", price: "", baiduLink: "", tags: "", deliveryContent: "", initialStock: "" }));
+      await onSaved(isEdit ? "修改已保存" : `${digital ? "数字商品" : "数据集"}已发布${stockNote}`);
     } catch {
       setMsg("网络错误，请重试");
     }
@@ -660,9 +680,23 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
   return (
     <form onSubmit={onSubmit}>
       <h2 className={styles.sectionTitle}>
-        {isEdit ? `编辑数据集：${editingDataset.name}` : "发布数据集"}
+        {isEdit ? `编辑${digital ? "数字商品" : "数据集"}：${editingDataset.name}` : `发布${digital ? "数字商品" : "数据集"}`}
       </h2>
       <div className={styles.formGrid}>
+        <Field label="类别" hint={digital ? "付款后弹窗显示购买内容，适合账号、卡密、文件等" : "付款后解锁下载链接"}>
+          {(id) => <select id={id} className={styles.input} value={form.category} onChange={set("category")}>
+            <option value="dataset">数据集</option>
+            <option value="digital">数字商品</option>
+          </select>}
+        </Field>
+        {digital ? (
+          <Field label="发货方式" hint={stockMode ? "每笔订单自动发放一条库存，可重复购买" : "所有买家看到相同的内容，购买一次永久可见"}>
+            {(id) => <select id={id} className={styles.input} value={form.deliveryMode} onChange={set("deliveryMode")}>
+              <option value="fixed">固定内容（文件、教程、共享账号）</option>
+              <option value="stock">库存逐个发货（独立账号、卡密）</option>
+            </select>}
+          </Field>
+        ) : null}
         <Field label="名称">
           {(id) => <input id={id} className={styles.input} value={form.name} onChange={set("name")} maxLength={120} required />}
         </Field>
@@ -677,10 +711,25 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
           {(id) => <textarea id={id} className={styles.textarea} value={form.richContent} onChange={set("richContent")}
             placeholder="<p>数据来源、字段说明、更新频率…</p>" />}
         </Field>
-        <Field label="网盘 / 下载链接" hint="仅向已购买用户展示，必须是 HTTPS 地址">
-          {(id) => <input id={id} className={styles.input} type="url" inputMode="url" value={form.baiduLink} onChange={set("baiduLink")}
-            placeholder="https://pan.baidu.com/s/…" required />}
-        </Field>
+        {digital && !stockMode && (
+          <Field label="发货内容" hint="付款后在弹窗中显示，纯文本，支持换行；https 链接会自动变为可点击。最多 20000 字" full>
+            {(id) => <textarea id={id} className={`${styles.textarea} ${styles.textareaPlain}`} value={form.deliveryContent}
+              onChange={set("deliveryContent")} maxLength={20000}
+              placeholder={"例如：\n文件下载：https://pan.example.com/s/xxxx  提取码：abcd\n解压密码：123456"} />}
+          </Field>
+        )}
+        {stockMode && !isEdit && (
+          <Field label="初始库存（可选）" hint="每行一条，每笔订单发放一条。发布后也可以在编辑页补货" full>
+            {(id) => <textarea id={id} className={`${styles.textarea} ${styles.textareaPlain}`} value={form.initialStock}
+              onChange={set("initialStock")} placeholder={"account1@example.com----password1\naccount2@example.com----password2"} />}
+          </Field>
+        )}
+        {!stockMode && (
+          <Field label={digital ? "下载链接（可选）" : "网盘 / 下载链接"} hint="仅向已购买用户展示，必须是 HTTPS 地址">
+            {(id) => <input id={id} className={styles.input} type="url" inputMode="url" value={form.baiduLink} onChange={set("baiduLink")}
+              placeholder="https://pan.baidu.com/s/…" required={!digital} />}
+          </Field>
+        )}
         <Field label="标签（逗号分隔，可选）">
           {(id) => <input id={id} className={styles.input} value={form.tags} onChange={set("tags")} placeholder="例如：人口, 宏观经济" />}
         </Field>
@@ -696,7 +745,101 @@ function DatasetForm({ editingDataset, onSaved, onCancel }) {
         )}
       </div>
       <FormError msg={msg} />
+      {isEdit && editingDataset.category === "digital" && editingDataset.deliveryMode === "stock" && stockMode && (
+        <StockManager datasetId={editingDataset.id} />
+      )}
     </form>
+  );
+}
+
+// Inventory for a saved stock-mode product. Changes apply immediately.
+function StockManager({ datasetId }) {
+  const [state, setState] = useState(null);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [notice, flash] = useNotice();
+  const url = `/api/admin/stock?datasetId=${encodeURIComponent(datasetId)}`;
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { setState(data); setMsg(""); } else setMsg(data.message || "库存读取失败");
+    } catch {
+      setMsg("网络错误，库存读取失败");
+    }
+  }, [url]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void load(); }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  const add = async () => {
+    if (busy || !input.trim()) return;
+    setBusy(true); setMsg("");
+    try {
+      const res = await fetch("/api/admin/stock", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datasetId, items: input }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setMsg(data.message || "添加失败");
+      else {
+        setInput("");
+        flash(`已添加 ${data.added} 条${data.delivered ? `，其中 ${data.delivered} 条已补发给缺货订单` : ""}`);
+        await load();
+      }
+    } catch {
+      setMsg("网络错误，请重试");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (busy || !confirm("确定清空全部未售库存吗？此操作不可恢复。")) return;
+    setBusy(true); setMsg("");
+    try {
+      const res = await fetch(url, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setMsg(data.message || "清空失败");
+      else { flash("库存已清空"); await load(); }
+    } catch {
+      setMsg("网络错误，请重试");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.listBlock}>
+      <h3 className={styles.listTitle}>
+        库存管理 · 剩余 {state ? state.count : "…"} 条
+        {state?.pending ? ` · ${state.pending} 笔已付款订单等待补货` : ""}
+      </h3>
+      <Field label="补充库存" hint="每行一条；如有等待补货的已付款订单，会优先自动发放给它们" full>
+        {(id) => <textarea id={id} className={`${styles.textarea} ${styles.textareaPlain}`} value={input}
+          onChange={(e) => setInput(e.target.value)} placeholder={"account3@example.com----password3\nCARD-XXXX-XXXX"} />}
+      </Field>
+      <div className={styles.btnRow}>
+        <button type="button" className={styles.primaryBtn} onClick={add} disabled={busy || !input.trim()}>
+          {busy ? "处理中…" : "添加库存"}
+        </button>
+        <button type="button" className={styles.secondaryBtn} onClick={clear} disabled={busy || !state?.count}>
+          清空未售库存
+        </button>
+      </div>
+      <FormError msg={msg} />
+      <Notice text={notice} />
+      {state?.items?.length > 0 && (
+        <details>
+          <summary className={styles.hint}>查看未售库存{state.count > state.items.length ? `（显示前 ${state.items.length} 条）` : ""}</summary>
+          <pre className={styles.stockList}>{state.items.join("\n")}</pre>
+        </details>
+      )}
+    </div>
   );
 }
 

@@ -12,12 +12,7 @@ import {
   sanitizeRichText,
 } from "../../../lib/content";
 import { requireSameOrigin } from "../../../lib/security";
-
-function hasPurchased(purchasedIds, datasetId) {
-  if (!Array.isArray(purchasedIds)) return false;
-  const target = String(datasetId);
-  return purchasedIds.map(String).includes(target);
-}
+import { clearStock, getDeliveries, getStockCount, isStockMode, parseDigitalFields, presentDataset } from "../../../lib/digital";
 
 async function handler(req, res) {
   const { id } = req.query;
@@ -37,27 +32,13 @@ async function handler(req, res) {
         purchasedIds = await getPurchasedIds(user.email);
       }
 
-      const isPaid = isLoggedIn && hasPurchased(purchasedIds, id);
-      const isFree = Number(dataset.price) === 0;
-      const hasAccess = isPaid || isFree || isAdmin;
-
-      const { baiduLink, downloadUrl, ...rest } = dataset;
-      const realLink = baiduLink || downloadUrl;
-
-      if (isAdmin) {
-        return res.json({
-          ...rest,
-          isPaid: true,
-          baiduLink: realLink || null,
-          downloadUrl: realLink || null,
-        });
-      }
-
-      return res.json({
-        ...rest,
-        isPaid: hasAccess,
-        downloadUrl: hasAccess ? realLink : null,
-      });
+      const stock = isStockMode(dataset);
+      return res.json(presentDataset(dataset, {
+        isAdmin,
+        purchased: isLoggedIn && purchasedIds.map(String).includes(String(dataset.id)),
+        stockCount: stock ? await getStockCount(dataset.id) : undefined,
+        deliveries: stock && isLoggedIn && user.email ? await getDeliveries(user.email, dataset.id) : undefined,
+      }));
     } catch (error) {
       console.error("获取数据集详情失败:", error);
       return res.status(500).json({ message: "服务器内部错误" });
@@ -70,7 +51,12 @@ async function handler(req, res) {
 
     try {
       const body = req.body || {};
-      const patch = {};
+      const current = (await getDatasets()).find((d) => String(d.id) === String(id));
+      if (!current) return res.status(404).json({ message: "更新失败，未找到该数据集" });
+      const digital = parseDigitalFields(body, current);
+      if (digital.error) return res.status(400).json({ message: digital.error });
+      const patch = { ...digital.patch };
+      const isDigitalItem = (patch.category ?? current.category) === "digital";
 
       if (body.name !== undefined) {
         const safeName = cleanText(body.name, 120);
@@ -105,12 +91,16 @@ async function handler(req, res) {
       }
       if (body.tags !== undefined) patch.tags = cleanTags(body.tags);
       if (body.baiduLink !== undefined) {
-        const safeLink = String(body.baiduLink).trim();
-        if (!isHttpUrl(safeLink)) {
+        const safeLink = String(body.baiduLink || "").trim();
+        if (!safeLink && isDigitalItem) {
+          patch.baiduLink = null;
+          patch.downloadUrl = null;
+        } else if (!isHttpUrl(safeLink)) {
           return res.status(400).json({ message: "下载链接必须是有效的 HTTPS 地址" });
+        } else {
+          patch.baiduLink = safeLink;
+          patch.downloadUrl = patch.baiduLink;
         }
-        patch.baiduLink = safeLink;
-        patch.downloadUrl = patch.baiduLink;
       }
 
       patch.updatedAt = new Date().toISOString();
@@ -131,6 +121,8 @@ async function handler(req, res) {
     try {
       const deleted = await deleteDataset(id);
       if (!deleted) return res.status(404).json({ message: "资源不存在或已删除" });
+      // Unsold accounts / card keys must not linger after the product is gone.
+      await clearStock(String(id));
       return res.json({ success: true });
     } catch (e) {
       console.error("删除数据集失败:", e);
