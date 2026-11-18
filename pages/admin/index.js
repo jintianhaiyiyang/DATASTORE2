@@ -1,7 +1,7 @@
 import UsdtAdmin from "../../components/UsdtAdmin";
 import OrdersAdmin from "../../components/OrdersAdmin";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { AnnouncementBar } from "../../components/Layout";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { updateSiteSettingsCache } from "../../lib/useSiteSettings";
@@ -337,7 +337,6 @@ function AnnouncementSection({ siteSettings, setSiteSettings }) {
   }));
   const { saving, msg, notice, save } = useSettingsSave(setSiteSettings, "公告已保存");
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
-  const warning = form.announcementTone === "warning";
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); void save(form); }}>
@@ -351,11 +350,11 @@ function AnnouncementSection({ siteSettings, setSiteSettings }) {
         onChange={(checked) => setForm((prev) => ({ ...prev, announcementEnabled: checked }))}
       />
       <div className={styles.formGrid}>
-        <Field label="公告内容" hint={`${form.announcementText.length} / ${ANNOUNCEMENT_MAX_LENGTH} 字，纯文本`} full>
+        <Field label="公告内容" hint={`${form.announcementText.length} / ${ANNOUNCEMENT_MAX_LENGTH} 字，纯文本。每行一条，多条会显示为编号列表，平时折叠为一行，访客可展开；邮箱和 https 链接可点击`} full>
           {(id) => (
             <textarea id={id} className={`${styles.textarea} ${styles.textareaPlain}`} value={form.announcementText}
               onChange={set("announcementText")} maxLength={ANNOUNCEMENT_MAX_LENGTH}
-              placeholder="例如：国庆期间所有数据集 8 折，10 月 7 日截止。" required={form.announcementEnabled} />
+              placeholder={"例如：\n付款后请务必保存好卡密或账号\n一旦售出不支持退款，渠道失效和承诺质保除外\n客服邮箱 support@example.com"} required={form.announcementEnabled} />
           )}
         </Field>
         <Field label="链接（可选）" hint="站内路径如 /dataset/…，或 https:// 开头的外部链接">
@@ -373,9 +372,9 @@ function AnnouncementSection({ siteSettings, setSiteSettings }) {
       </div>
 
       <p className={styles.previewLabel}>预览</p>
-      <div className={`${styles.announcePreview} ${warning ? styles.announcePreviewWarning : ""}`}>
-        {form.announcementText || "公告内容会显示在这里"}
-        {form.announcementLink && <span className={styles.announcePreviewLink}>查看详情</span>}
+      <div className={styles.announcePreview}>
+        <AnnouncementBar preview text={form.announcementText || "公告内容会显示在这里"}
+          link={form.announcementLink} tone={form.announcementTone} />
       </div>
 
       <div className={styles.btnRow}>

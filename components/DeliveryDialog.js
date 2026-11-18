@@ -1,16 +1,6 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import LinkedText from "./LinkedText";
 import styles from "../styles/Delivery.module.css";
-
-const URL_PATTERN = /(https?:\/\/[^\s<>"'，。；、）】]+)/g;
-
-// Plain text with http(s) links made clickable. Never rendered as HTML.
-function LinkedText({ text }) {
-  return String(text).split(URL_PATTERN).map((part, index) => (
-    index % 2 === 1
-      ? <a key={index} href={part} target="_blank" rel="noopener noreferrer nofollow">{part}</a>
-      : <Fragment key={index}>{part}</Fragment>
-  ));
-}
 
 async function copyText(text) {
   try {

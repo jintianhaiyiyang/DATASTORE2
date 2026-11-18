@@ -2,8 +2,10 @@ import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { useSiteSettings } from "../lib/useSiteSettings";
+import { splitAnnouncement } from "../lib/announcement";
+import LinkedText from "./LinkedText";
 import styles from "../styles/Layout.module.css";
 
 const LogoIcon = () => (
@@ -44,10 +46,14 @@ const MegaphoneIcon = () => (
   </svg>
 );
 
-function AnnouncementBar({ text, link, tone }) {
+// Long notices collapse to their first item; each item is one rule.
+export function AnnouncementBar({ text, link, tone, preview = false }) {
   // Closing hides this exact announcement; a new text shows again.
   const signature = `${text}\n${link}`;
   const dismissed = useSyncExternalStore(subscribeDismissed, readDismissed, () => "");
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const items = splitAnnouncement(text);
   const dismiss = useCallback(() => {
     try {
       window.localStorage.setItem(DISMISS_KEY, signature);
@@ -57,21 +63,51 @@ function AnnouncementBar({ text, link, tone }) {
     window.dispatchEvent(new Event(DISMISS_EVENT));
   }, [signature]);
 
-  if (dismissed === signature) return null;
+  if (!items.length || (!preview && dismissed === signature)) return null;
   const external = /^https:\/\//i.test(link);
+  const detail = link && (external ? (
+    <a href={link} target="_blank" rel="noopener noreferrer" className={styles.announcementLink}>查看详情 →</a>
+  ) : (
+    <Link href={link} className={styles.announcementLink}>查看详情 →</Link>
+  ));
+  const list = items.length > 1;
+  const open = expanded || !list;
+
   return (
     <aside className={`${styles.announcement} ${tone === "warning" ? styles.announcementWarning : ""}`} aria-label="网站公告">
       <div className={styles.announcementInner}>
         <span className={styles.announcementIcon}><MegaphoneIcon /></span>
-        <p className={styles.announcementText}>
-          {text}
-          {link && (external ? (
-            <a href={link} target="_blank" rel="noopener noreferrer" className={styles.announcementLink}>查看详情</a>
+        <div className={styles.announcementBody}>
+          {!open ? (
+            <p className={styles.announcementSummary}>
+              <span className={styles.announcementCount}>公告 · {items.length} 条</span>
+              <span className={styles.announcementFirst}>{items[0]}</span>
+            </p>
+          ) : list ? (
+            <ol id={listId} className={styles.announcementList}>
+              {items.map((item, index) => (
+                <li key={index}>
+                  <span className={styles.announcementNum} aria-hidden="true">{index + 1}</span>
+                  <span><LinkedText text={item} className={styles.announcementInlineLink} /></span>
+                </li>
+              ))}
+            </ol>
           ) : (
-            <Link href={link} className={styles.announcementLink}>查看详情</Link>
-          ))}
-        </p>
-        <button type="button" className={styles.announcementClose} onClick={dismiss} aria-label="关闭公告">×</button>
+            <p className={styles.announcementText}><LinkedText text={items[0]} className={styles.announcementInlineLink} /></p>
+          )}
+          {(list || detail) && (
+            <div className={styles.announcementActions}>
+              {list && (
+                <button type="button" className={styles.announcementToggle} aria-expanded={open}
+                  aria-controls={open ? listId : undefined} onClick={() => setExpanded(!expanded)}>
+                  {open ? "收起" : "展开全部"}
+                </button>
+              )}
+              {detail}
+            </div>
+          )}
+        </div>
+        {!preview && <button type="button" className={styles.announcementClose} onClick={dismiss} aria-label="关闭公告">×</button>}
       </div>
     </aside>
   );
