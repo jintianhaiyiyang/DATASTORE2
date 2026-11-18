@@ -283,28 +283,13 @@
 }
 
 .announcePreview {
-  padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1e3a8a;
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  overflow: hidden;
 }
 
-.announcePreviewWarning {
-  border-color: #fed7aa;
-  background: #fff7ed;
-  color: #7c2d12;
-}
-
-.announcePreviewLink {
-  margin-left: 8px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
+.announcePreview > aside { border-bottom: 0; }
+.announcePreview > aside > div { padding-left: 14px; padding-right: 14px; }
 
 /* Payment providers */
 .providerList {

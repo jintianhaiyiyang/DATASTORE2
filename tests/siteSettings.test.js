@@ -32,3 +32,15 @@ describe("site settings updates", () => {
     expect(withPaymentAvailability({ enableAlipay: false }, env).payments).toEqual({ wechat: false, alipay: false, usdt: false });
   });
 });
+
+describe("announcement list", () => {
+  it("keeps one item per line and splits inline numbering", async () => {
+    const { splitAnnouncement } = await import("../lib/announcement");
+    expect(parseSiteSettingsUpdate({ announcementText: " 1. 第一条 \r\n\r\n 2、<b>第二</b>条 " }).settings.announcementText)
+      .toBe("1. 第一条\n2、第二条");
+    expect(splitAnnouncement("1. 第一条\n2、第二条")).toEqual(["第一条", "第二条"]);
+    expect(splitAnnouncement("1 先保存卡密！ 2 有问题找客服。 24小时内回复 3 售出不退")).toEqual(["先保存卡密！", "有问题找客服。 24小时内回复", "售出不退"]);
+    expect(splitAnnouncement("国庆 8 折，10 月 7 日截止")).toEqual(["国庆 8 折，10 月 7 日截止"]);
+    expect(splitAnnouncement("活动 1 月 2 日开始")).toEqual(["活动 1 月 2 日开始"]);
+  });
+});
