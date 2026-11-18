@@ -107,7 +107,7 @@ export default function DeliveryDialog({ name, title = "购买成功", entries, 
           </button>
         )}
         <p className={styles.tip} role="status">
-          {copied === "error" ? "复制失败，请长按或选中文本手动复制" : "请妥善保存。之后也可以在本页点击“查看已购内容”再次查看。"}
+          {copied === "error" ? "复制失败，请长按或选中文本手动复制" : "请妥善保存。之后可在“我的订单”或商品页随时再次查看。"}
         </p>
         <button type="button" className={styles.done} onClick={onClose} data-autofocus>我已保存</button>
       </dialog>

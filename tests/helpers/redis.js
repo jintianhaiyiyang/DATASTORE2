@@ -15,6 +15,10 @@ export const redis = {
   incr: (key) => command('INCR', key), del: (...keys) => command('DEL', ...keys),
   sadd: (key, ...values) => command('SADD', key, ...values), smembers: (key) => command('SMEMBERS', key),
   // List/hash reads decode JSON values like @vercel/kv's automatic deserialization.
+  mget: async (...keys) => (await command('MGET', ...keys)).map(decode),
+  zadd: (key, { score, member }) => command('ZADD', key, score, member),
+  persist: (key) => command('PERSIST', key),
+  scan: (cursor, { match = '*', count = 10 } = {}) => command('SCAN', cursor, 'MATCH', match, 'COUNT', count),
   rpush: (key, ...values) => command('RPUSH', key, ...values), llen: (key) => command('LLEN', key),
   lindex: async (key, index) => decode(await command('LINDEX', key, index)),
   lrange: async (key, start, end) => (await command('LRANGE', key, start, end)).map(decode),

@@ -159,6 +159,11 @@ export default function Layout({ title, children }) {
 
             {user && user.isLoggedIn ? (
               <>
+                {user.email && (
+                  <Link href="/orders" className={linkClass("/orders")}>
+                    我的订单
+                  </Link>
+                )}
                 <span className={styles.userChip} title={user.username || user.email}>
                   {user.username}
                 </span>

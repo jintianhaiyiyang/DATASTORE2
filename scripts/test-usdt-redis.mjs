@@ -19,6 +19,6 @@ try {
     server.stdout.on('data', (data) => { if (data.toString().includes('Ready to accept connections')) { clearTimeout(timeout); resolve(); } });
     server.stderr.on('data', (data) => process.stderr.write(data));
   });
-  const test = spawn(process.execPath, ['node_modules/vitest/vitest.mjs','run','tests/usdt.redis.test.js','tests/digital.redis.test.js','--no-file-parallelism'], { stdio: 'inherit', env: { ...process.env, REDIS_TEST_PORT: String(port) } });
+  const test = spawn(process.execPath, ['node_modules/vitest/vitest.mjs','run','tests/usdt.redis.test.js','tests/digital.redis.test.js','tests/orders.redis.test.js','--no-file-parallelism'], { stdio: 'inherit', env: { ...process.env, REDIS_TEST_PORT: String(port) } });
   process.exitCode = await new Promise((resolve) => test.on('exit', resolve));
 } finally { server.kill(); await exited; await rm(dir, { recursive: true, force: true }); }

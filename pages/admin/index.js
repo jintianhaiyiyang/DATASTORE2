@@ -1,4 +1,5 @@
 import UsdtAdmin from "../../components/UsdtAdmin";
+import OrdersAdmin from "../../components/OrdersAdmin";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import Image from "next/image";
@@ -187,6 +188,8 @@ export default function AdminPage() {
               setEditingDataset={setEditingDataset}
               refresh={fetchAllData}
             />
+          ) : tab === "orders" ? (
+            <OrdersAdmin />
           ) : tab === "article" ? (
             <ArticleAdminSection
               articles={articles}
@@ -213,6 +216,7 @@ export default function AdminPage() {
 
 const TABS = [
   { key: "dataset", label: "数据集 / 数字商品" },
+  { key: "orders", label: "订单" },
   { key: "article", label: "文章" },
   { key: "announcement", label: "公告" },
   { key: "payment", label: "支付" },
