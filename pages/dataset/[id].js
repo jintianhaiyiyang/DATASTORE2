@@ -4,30 +4,8 @@ import Link from "next/link";
 import Layout from "../../components/Layout";
 import PaymentPanel from "../../components/PaymentPanel";
 import DeliveryDialog from "../../components/DeliveryDialog";
+import { deliveryEntries } from "../../lib/deliveryEntries";
 import styles from "../../styles/Detail.module.css";
-
-// What the buyer received. orderId narrows a stock product to that order.
-function deliveryEntries(dataset, orderId) {
-  if (dataset?.category !== "digital") return [];
-  if (dataset.deliveryMode === "stock") {
-    const all = Array.isArray(dataset.deliveries) ? dataset.deliveries : [];
-    const list = orderId ? all.filter((entry) => entry.orderId === orderId) : all;
-    return list.map((entry, index) => ({
-      key: entry.orderId,
-      label: list.length > 1 ? `第 ${list.length - index} 次购买` : "订单内容",
-      text: entry.item,
-      pending: entry.pending,
-      time: entry.deliveredAt || entry.paidAt,
-    }));
-  }
-  if (!dataset.isPaid) return [];
-  const entries = [];
-  if (dataset.deliveryContent) entries.push({ key: "content", text: dataset.deliveryContent });
-  if (typeof dataset.downloadUrl === "string" && /^https:\/\//i.test(dataset.downloadUrl)) {
-    entries.push({ key: "link", label: "下载链接", text: dataset.downloadUrl });
-  }
-  return entries;
-}
 
 function DatasetContent({ id }) {
   const router = useRouter();
